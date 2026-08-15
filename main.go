@@ -4,6 +4,7 @@ import (
 	"log"
 	"url-shortener/config"
 	"url-shortener/models"
+	"url-shortener/routes"
 )
 
 func main() {
@@ -29,4 +30,11 @@ func main() {
 	}
 
 	log.Println("Database migrated successfully")
+	router := routes.SetupRouter(db)
+
+	err = router.Run()
+	if err != nil {
+		log.Fatal("Error starting server", err)
+	}
+
 }
