@@ -31,7 +31,7 @@ func main() {
 	}
 
 	log.Println("Database migrated successfully")
-	router := routes.SetupRouter(db)
+	router := routes.SetupRouter(db, cfg)
 
 	serverAddr := ":" + cfg.ServerPort
 	fmt.Println("Listening on ", serverAddr)

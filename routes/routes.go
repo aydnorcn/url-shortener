@@ -1,7 +1,9 @@
 package routes
 
 import (
+	"url-shortener/config"
 	"url-shortener/controller"
+	"url-shortener/middleware"
 	"url-shortener/repository"
 	"url-shortener/service"
 
@@ -9,7 +11,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func SetupRouter(db *gorm.DB) *gin.Engine {
+func SetupRouter(db *gorm.DB, cfg config.Config) *gin.Engine {
 	r := gin.Default()
 
 	//TODO: User and url repo
@@ -17,7 +19,7 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 	urlRepo := repository.NewUrlRepository(db)
 
 	//TODO: User and url service
-	authService := service.NewAuthService(userRepo)
+	authService := service.NewAuthService(userRepo, &cfg)
 	urlService := service.NewUrlService(urlRepo)
 
 	//TODO: User and url controller
@@ -40,6 +42,7 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 			authGroup.POST("/register", authController.Register)
 		}
 		urlGroup := api.Group("/urls")
+		urlGroup.Use(middleware.AuthMiddleware(cfg.JwtSecret))
 		{
 			urlGroup.POST("/", urlController.CreateUrl)
 			urlGroup.GET("/:id", urlController.GetUrl)

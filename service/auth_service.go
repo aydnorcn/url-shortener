@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"url-shortener/config"
 	"url-shortener/dto"
 	"url-shortener/models"
 	"url-shortener/repository"
@@ -17,11 +18,13 @@ type AuthService interface {
 
 type authService struct {
 	userRepo repository.UserRepository
+	cfg      *config.Config
 }
 
-func NewAuthService(userRepo repository.UserRepository) AuthService {
+func NewAuthService(userRepo repository.UserRepository, cfg *config.Config) AuthService {
 	return &authService{
 		userRepo: userRepo,
+		cfg:      cfg,
 	}
 }
 
@@ -50,7 +53,7 @@ func (a authService) Register(req dto.RegisterRequest) error {
 		Password: hashedPassword,
 	}
 
-	if _, err := a.userRepo.Create(user); err != nil {
+	if err := a.userRepo.Create(user); err != nil {
 		return errors.New("failed to create user")
 	}
 
@@ -69,7 +72,10 @@ func (a authService) Login(req dto.LoginRequest) (*dto.AuthResponse, error) {
 	}
 
 	//TODO: Implement jwt token generation
-	token := "jwt_token"
+	token, err := utils.GenerateToken(user.ID, user.Email, a.cfg.JwtSecret, 1)
+	if err != nil {
+		return nil, errors.New("failed to generate token")
+	}
 
 	return &dto.AuthResponse{
 		Token: token,
