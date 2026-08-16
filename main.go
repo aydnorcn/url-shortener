@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"url-shortener/config"
 	"url-shortener/models"
@@ -32,9 +33,10 @@ func main() {
 	log.Println("Database migrated successfully")
 	router := routes.SetupRouter(db)
 
-	err = router.Run()
-	if err != nil {
-		log.Fatal("Error starting server", err)
-	}
+	serverAddr := ":" + cfg.ServerPort
+	fmt.Println("Listening on ", serverAddr)
 
+	if err := router.Run(serverAddr); err != nil {
+		log.Fatalf("Error starting server: %v", err)
+	}
 }
