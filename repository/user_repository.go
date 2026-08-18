@@ -10,10 +10,23 @@ type UserRepository interface {
 	Create(user *models.User) error
 	FindByEmail(email string) (*models.User, error)
 	FindById(id uint) (*models.User, error)
+	ExistsByEmail(email string) (bool, error)
 }
 
 type userRepository struct {
 	db *gorm.DB
+}
+
+func (u *userRepository) ExistsByEmail(email string) (bool, error) {
+	var exists bool
+
+	err := u.db.Raw(`
+        SELECT EXISTS (
+            SELECT 1 FROM users WHERE email = ?
+        )
+    `, email).Scan(&exists).Error
+
+	return exists, err
 }
 
 func NewUserRepository(db *gorm.DB) UserRepository {

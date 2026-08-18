@@ -8,27 +8,28 @@ import (
 
 type UrlRepository interface {
 	Create(url models.URL) error
-	FindByUrl(url string) (*models.URL, error)
 	FindById(id string) (*models.URL, error)
+	FindByIdAndUserId(id string, userId string) (*models.URL, error)
+	FindByShortCode(code string) (*models.URL, error)
+	FindAllByUserId(userId string) (*[]models.URL, error)
+	CountByUserId(userId string) (int64, error)
 	Update(url *models.URL) error
-	Delete(url *models.URL) error
+	SoftDelete(url *models.URL) error
+	SetActive(url *models.URL) error
 }
 
 type urlRepository struct {
 	db *gorm.DB
 }
 
-func (u *urlRepository) Create(url models.URL) error {
-	return u.db.Create(url).Error
+func NewUrlRepository(db *gorm.DB) UrlRepository {
+	return &urlRepository{
+		db: db,
+	}
 }
 
-func (u *urlRepository) FindByUrl(url string) (*models.URL, error) {
-	var urlModel models.URL
-	err := u.db.Where("url = ?", url).First(&urlModel).Error
-	if err != nil {
-		return nil, err
-	}
-	return &urlModel, nil
+func (u *urlRepository) Create(url models.URL) error {
+	return u.db.Create(url).Error
 }
 
 func (u *urlRepository) FindById(id string) (*models.URL, error) {
@@ -40,6 +41,43 @@ func (u *urlRepository) FindById(id string) (*models.URL, error) {
 	return &url, nil
 }
 
+func (u *urlRepository) FindByIdAndUserId(id string, userId string) (*models.URL, error) {
+	var url models.URL
+	err := u.db.Where("id = ? AND user_id = ?", id, userId).First(&url).Error
+	if err != nil {
+		return nil, err
+	}
+	return &url, nil
+}
+
+func (u *urlRepository) FindByShortCode(code string) (*models.URL, error) {
+	var url models.URL
+	err := u.db.Where("short_code = ?", code).First(&url).Error
+	if err != nil {
+		return nil, err
+	}
+	return &url, nil
+}
+
+func (u *urlRepository) FindAllByUserId(userId string) (*[]models.URL, error) {
+	var urls []models.URL
+
+	err := u.db.Where("user_id = ?", userId).Find(&urls).Error
+	if err != nil {
+		return nil, err
+	}
+	return &urls, nil
+}
+
+func (u *urlRepository) CountByUserId(userId string) (int64, error) {
+	var count int64
+	err := u.db.Model(&models.URL{}).Where("user_id = ?", userId).Count(&count).Error
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
 func (u *urlRepository) Update(url *models.URL) error {
 	var urlModel models.URL
 	err := u.db.Model(&urlModel).Where("id = ?", url.ID).Updates(url).Error
@@ -49,12 +87,13 @@ func (u *urlRepository) Update(url *models.URL) error {
 	return nil
 }
 
-func (u *urlRepository) Delete(url *models.URL) error {
-	return u.db.Delete(&url).Error
+func (u *urlRepository) SoftDelete(url *models.URL) error {
+	url.IsDeleted = true
+	url.IsActive = false
+	return u.db.Save(url).Error
 }
 
-func NewUrlRepository(db *gorm.DB) UrlRepository {
-	return &urlRepository{
-		db: db,
-	}
+func (u *urlRepository) SetActive(url *models.URL) error {
+	url.IsActive = true
+	return u.db.Save(url).Error
 }
