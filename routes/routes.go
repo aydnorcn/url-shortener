@@ -13,6 +13,7 @@ import (
 
 func SetupRouter(db *gorm.DB, cfg config.Config) *gin.Engine {
 	r := gin.Default()
+	r.Use(middleware.ErrorHandlerMiddleware())
 
 	//TODO: User and url repo
 	userRepo := repository.NewUserRepository(db)
