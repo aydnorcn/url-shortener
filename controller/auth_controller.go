@@ -27,12 +27,13 @@ func (authController *AuthController) Login(c *gin.Context) {
 	}
 
 	user, err := authController.authService.Login(req)
+
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		c.Error(err)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"user": user})
+	c.JSON(http.StatusOK, &user)
 }
 
 func (authController *AuthController) Register(c *gin.Context) {
@@ -46,7 +47,8 @@ func (authController *AuthController) Register(c *gin.Context) {
 	err := authController.authService.Register(req)
 
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		c.Error(err)
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{

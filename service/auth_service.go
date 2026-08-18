@@ -1,7 +1,8 @@
 package service
 
 import (
-	"errors"
+	"net/http"
+	"url-shortener/appErrors"
 	"url-shortener/config"
 	"url-shortener/dto"
 	"url-shortener/models"
@@ -40,12 +41,16 @@ func (a authService) GetUserFromToken(token string) (*models.User, error) {
 
 func (a authService) Register(req dto.RegisterRequest) error {
 	if _, err := a.userRepo.FindByEmail(req.Email); err == nil {
-		return errors.New("email already registered")
+		return &appErrors.AppError{
+			Code:    "EMAIL_ALREADY_EXISTS",
+			Message: "User already exists with this email",
+			Status:  http.StatusConflict,
+		}
 	}
 
 	hashedPassword, err := utils.HashPassword(req.Password)
 	if err != nil {
-		return errors.New("Failed to hash password")
+		return appErrors.ErrServerError
 	}
 
 	user := &models.User{
@@ -54,7 +59,7 @@ func (a authService) Register(req dto.RegisterRequest) error {
 	}
 
 	if err := a.userRepo.Create(user); err != nil {
-		return errors.New("failed to create user")
+		return appErrors.ErrServerError
 	}
 
 	return nil
@@ -63,18 +68,25 @@ func (a authService) Register(req dto.RegisterRequest) error {
 func (a authService) Login(req dto.LoginRequest) (*dto.AuthResponse, error) {
 	user, err := a.userRepo.FindByEmail(req.Email)
 	if err != nil {
-		return nil, errors.New("invalid email")
+		return nil, appErrors.ErrUserNotFound
 	}
 
 	//Comparing passwords
 	if !utils.CheckPasswordHash(req.Password, user.Password) {
-		return nil, errors.New("invalid password")
+		return nil, &appErrors.AppError{
+			Code:    "WRONG_PASSWORD",
+			Message: "Wrong password",
+			Status:  http.StatusBadRequest,
+		}
 	}
 
-	//TODO: Implement jwt token generation
 	token, err := utils.GenerateToken(user.ID, user.Email, a.cfg.JwtSecret, 1)
 	if err != nil {
-		return nil, errors.New("failed to generate token")
+		return nil, &appErrors.AppError{
+			Code:    "FAILED_TOKEN_GENERATION",
+			Message: "Failed to generate token",
+			Status:  http.StatusInternalServerError,
+		}
 	}
 
 	return &dto.AuthResponse{
