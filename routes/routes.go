@@ -46,12 +46,15 @@ func SetupRouter(db *gorm.DB, cfg config.Config) *gin.Engine {
 		urlGroup.Use(middleware.AuthMiddleware(cfg.JwtSecret))
 		{
 			urlGroup.POST("/", urlController.CreateUrl)
+			urlGroup.GET("/", urlController.GetAllUrls)
 			urlGroup.GET("/:id", urlController.GetUrl)
-			urlGroup.PUT("/:id", urlController.UpdateUrl)
+			urlGroup.PATCH("/:id", urlController.UpdateUrl)
 			urlGroup.DELETE("/:id", urlController.DeleteUrl)
+			urlGroup.PATCH("/:id/activate", urlController.ActivateUrl)
+			urlGroup.PATCH("/:id/deactivate", urlController.DeactivateUrl)
 		}
 
-		api.GET("/:shortCode", urlController.GetUrl)
+		api.GET("/:shortCode", urlController.Redirect)
 	}
 
 	return r

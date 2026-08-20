@@ -7,12 +7,13 @@ import (
 )
 
 type UrlRepository interface {
-	Create(url models.URL) error
-	FindById(id string) (*models.URL, error)
-	FindByIdAndUserId(id string, userId string) (*models.URL, error)
+	Create(url *models.URL) error
+	FindById(id uint) (*models.URL, error)
+	FindByIdAndUserId(id uint, userId uint) (*models.URL, error)
 	FindByShortCode(code string) (*models.URL, error)
-	FindAllByUserId(userId string) (*[]models.URL, error)
-	CountByUserId(userId string) (int64, error)
+	ExistsByShortCode(code string) (bool, error)
+	FindAllByUserId(userId uint) (*[]models.URL, error)
+	CountByUserId(userId uint) (int64, error)
 	Update(url *models.URL) error
 	SoftDelete(url *models.URL) error
 	SetActive(url *models.URL) error
@@ -22,17 +23,29 @@ type urlRepository struct {
 	db *gorm.DB
 }
 
+func (u *urlRepository) ExistsByShortCode(code string) (bool, error) {
+	var exists bool
+
+	err := u.db.Raw(`
+        SELECT EXISTS (
+            SELECT 1 FROM urls WHERE short_code = ?
+        )
+    `, code).Scan(&exists).Error
+
+	return exists, err
+}
+
 func NewUrlRepository(db *gorm.DB) UrlRepository {
 	return &urlRepository{
 		db: db,
 	}
 }
 
-func (u *urlRepository) Create(url models.URL) error {
+func (u *urlRepository) Create(url *models.URL) error {
 	return u.db.Create(url).Error
 }
 
-func (u *urlRepository) FindById(id string) (*models.URL, error) {
+func (u *urlRepository) FindById(id uint) (*models.URL, error) {
 	var url models.URL
 	err := u.db.Where("id = ?", id).First(&url).Error
 	if err != nil {
@@ -41,7 +54,7 @@ func (u *urlRepository) FindById(id string) (*models.URL, error) {
 	return &url, nil
 }
 
-func (u *urlRepository) FindByIdAndUserId(id string, userId string) (*models.URL, error) {
+func (u *urlRepository) FindByIdAndUserId(id uint, userId uint) (*models.URL, error) {
 	var url models.URL
 	err := u.db.Where("id = ? AND user_id = ?", id, userId).First(&url).Error
 	if err != nil {
@@ -59,7 +72,7 @@ func (u *urlRepository) FindByShortCode(code string) (*models.URL, error) {
 	return &url, nil
 }
 
-func (u *urlRepository) FindAllByUserId(userId string) (*[]models.URL, error) {
+func (u *urlRepository) FindAllByUserId(userId uint) (*[]models.URL, error) {
 	var urls []models.URL
 
 	err := u.db.Where("user_id = ?", userId).Find(&urls).Error
@@ -69,7 +82,7 @@ func (u *urlRepository) FindAllByUserId(userId string) (*[]models.URL, error) {
 	return &urls, nil
 }
 
-func (u *urlRepository) CountByUserId(userId string) (int64, error) {
+func (u *urlRepository) CountByUserId(userId uint) (int64, error) {
 	var count int64
 	err := u.db.Model(&models.URL{}).Where("user_id = ?", userId).Count(&count).Error
 	if err != nil {

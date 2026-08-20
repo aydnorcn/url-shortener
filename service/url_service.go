@@ -1,17 +1,23 @@
 package service
 
 import (
+	"net/http"
+	"url-shortener/appErrors"
 	"url-shortener/dto"
 	"url-shortener/models"
 	"url-shortener/repository"
+	"url-shortener/utils"
 )
 
 type UrlService interface {
 	CreateUrl(userId uint, req dto.CreateUrlRequest) (*models.URL, error)
-	GetUrl(userId, urlId uint) (*models.URL, error)
+	GetUrl(userId uint, urlId uint) (*models.URL, error)
+	GetUserUrls(userId uint) (*[]models.URL, error)
 	UpdateUrl(userId uint, urlId uint, req dto.UpdateUrlRequest) (*models.URL, error)
 	DeleteUrl(userId uint, urlId uint) error
-	Redirect(shortCode string, userId uint) error
+	ActivateUrl(userId uint, urlId uint) error
+	DeactivateUrl(userId uint, urlId uint) error
+	Redirect(shortCode string) (string, error)
 }
 
 type urlService struct {
@@ -25,26 +31,143 @@ func NewUrlService(urlRepo repository.UrlRepository) UrlService {
 }
 
 func (u *urlService) CreateUrl(userId uint, req dto.CreateUrlRequest) (*models.URL, error) {
-	//TODO implement me
-	panic("implement me")
+	if req.CustomAlias != nil {
+		var exists bool
+		exists, _ = u.urlRepo.ExistsByShortCode(*req.CustomAlias)
+
+		if exists {
+			return nil, &appErrors.AppError{
+				Code:    "URl_ALREADY_EXISTS",
+				Message: "Url already exists",
+				Status:  http.StatusConflict,
+			}
+		}
+	}
+
+	shortCode, err := utils.GenerateShortCode()
+	if err != nil {
+		return nil, err
+	}
+
+	url := &models.URL{
+		OriginalURL: req.OriginalUrl,
+		ShortCode:   shortCode,
+		UserID:      userId,
+		ExpiresAt:   req.ExpiresAt,
+		IsActive:    true,
+		IsDeleted:   false,
+	}
+
+	if err := u.urlRepo.Create(url); err != nil {
+		return nil, err
+	}
+
+	return url, nil
+
 }
 
-func (u *urlService) GetUrl(userId, urlId uint) (*models.URL, error) {
-	//TODO implement me
-	panic("implement me")
+func (u *urlService) GetUrl(userId uint, urlId uint) (*models.URL, error) {
+	url, err := u.urlRepo.FindByIdAndUserId(urlId, userId)
+	if err != nil {
+		return nil, err
+	}
+	return url, nil
+}
+
+func (u *urlService) GetUserUrls(userId uint) (*[]models.URL, error) {
+	urls, err := u.urlRepo.FindAllByUserId(userId)
+
+	if err != nil {
+		return nil, &appErrors.AppError{
+			Code:    "DB_ERROR",
+			Message: "Database error",
+			Status:  http.StatusInternalServerError,
+		}
+	}
+
+	return urls, nil
 }
 
 func (u *urlService) UpdateUrl(userId uint, urlId uint, req dto.UpdateUrlRequest) (*models.URL, error) {
-	//TODO implement me
-	panic("implement me")
+	url, err := u.urlRepo.FindByIdAndUserId(urlId, userId)
+
+	if err != nil {
+		return nil, appErrors.ErrURLNotFound
+	}
+
+	url.OriginalURL = req.OriginalUrl
+
+	if req.ExpiresAt != nil {
+		url.ExpiresAt = req.ExpiresAt
+	}
+
+	if req.IsActive != nil {
+		url.IsActive = *req.IsActive
+	}
+
+	ok := u.urlRepo.Update(url)
+
+	if ok != nil {
+		return nil, &appErrors.AppError{
+			Code:    "DB_ERROR",
+			Message: "Database error",
+			Status:  http.StatusInternalServerError,
+		}
+	}
+
+	return url, nil
 }
 
 func (u *urlService) DeleteUrl(userId uint, urlId uint) error {
-	//TODO implement me
-	panic("implement me")
+	url, err := u.urlRepo.FindByIdAndUserId(urlId, userId)
+	if err != nil {
+		return appErrors.ErrURLNotFound
+	}
+
+	if err := u.urlRepo.SoftDelete(url); err != nil {
+		return appErrors.ErrServerError
+	}
+	return nil
 }
 
-func (u *urlService) Redirect(shortCode string, userId uint) error {
-	//TODO implement me
-	panic("implement me")
+func (u *urlService) ActivateUrl(userId uint, urlId uint) error {
+	url, err := u.urlRepo.FindByIdAndUserId(urlId, userId)
+
+	if err != nil {
+		return appErrors.ErrURLNotFound
+	}
+
+	url.IsActive = true
+
+	if err := u.urlRepo.Update(url); err != nil {
+		return appErrors.ErrServerError
+	}
+
+	return nil
+}
+
+func (u *urlService) DeactivateUrl(userId uint, urlId uint) error {
+	url, err := u.urlRepo.FindByIdAndUserId(urlId, userId)
+
+	if err != nil {
+		return appErrors.ErrURLNotFound
+	}
+
+	url.IsActive = false
+
+	if err := u.urlRepo.Update(url); err != nil {
+		return appErrors.ErrServerError
+	}
+
+	return nil
+}
+
+func (u *urlService) Redirect(shortCode string) (string, error) {
+	url, err := u.urlRepo.FindByShortCode(shortCode)
+
+	if err != nil {
+		return "", appErrors.ErrURLNotFound
+	}
+
+	return url.OriginalURL, nil
 }

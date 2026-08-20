@@ -4,7 +4,8 @@ import "time"
 
 type URL struct {
 	ID          uint   `gorm:"primaryKey"`
-	OwnerUser   User   `gorm:"not null; foreignKey:OwnerUserId"`
+	UserID      uint   `gorm:"not null;index"`
+	OwnerUser   User   `gorm:"foreignKey:UserID;references:ID"`
 	OriginalURL string `gorm:"not null"`
 	ShortCode   string `gorm:"uniqueIndex;not null"`
 	ExpiresAt   *time.Time
