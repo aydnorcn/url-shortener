@@ -38,7 +38,7 @@ func AuthMiddleware(secretKey string) gin.HandlerFunc {
 			return
 		}
 
-		c.Set("userId", claims.UserID)
+		c.Set("userID", claims.UserID)
 		c.Set("email", claims.Email)
 
 		c.Next()
