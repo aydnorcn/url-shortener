@@ -17,7 +17,7 @@ import (
 type UrlService interface {
 	CreateUrl(userId uint, req dto.CreateUrlRequest) (*models.URL, error)
 	GetUrl(userId uint, urlId uint) (*models.URL, error)
-	GetUserUrls(userId uint) (*[]models.URL, error)
+	GetUserUrls(userId uint, page, pageSize int) (*[]models.URL, int64, error)
 	UpdateUrl(userId uint, urlId uint, req dto.UpdateUrlRequest) (*models.URL, error)
 	DeleteUrl(userId uint, urlId uint) error
 	ActivateUrl(userId uint, urlId uint) error
@@ -81,18 +81,18 @@ func (u *urlService) GetUrl(userId uint, urlId uint) (*models.URL, error) {
 	return url, nil
 }
 
-func (u *urlService) GetUserUrls(userId uint) (*[]models.URL, error) {
-	urls, err := u.urlRepo.FindAllByUserId(userId)
+func (u *urlService) GetUserUrls(userId uint, page, pageSize int) (*[]models.URL, int64, error) {
+	urls, total, err := u.urlRepo.FindAllByUserId(userId, page, pageSize)
 
 	if err != nil {
-		return nil, &appErrors.AppError{
+		return nil, -1, &appErrors.AppError{
 			Code:    "DB_ERROR",
 			Message: "Database error",
 			Status:  http.StatusInternalServerError,
 		}
 	}
 
-	return urls, nil
+	return urls, total, nil
 }
 
 func (u *urlService) UpdateUrl(userId uint, urlId uint, req dto.UpdateUrlRequest) (*models.URL, error) {

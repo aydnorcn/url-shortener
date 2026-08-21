@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"math"
 	"net/http"
 	"strconv"
 	"url-shortener/appErrors"
@@ -72,19 +73,37 @@ func (u *UrlController) GetUrl(c *gin.Context) {
 }
 
 func (u *UrlController) GetAllUrls(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
+
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 10
+	}
+
 	userId, ok := middleware.GetCurrentUserID(c)
 	if !ok {
 		c.Error(appErrors.ErrUnauthorized)
 		return
 	}
 
-	urls, err := u.urlService.GetUserUrls(userId)
+	urls, total, err := u.urlService.GetUserUrls(userId, page, pageSize)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	c.JSON(http.StatusOK, urls)
+	c.JSON(http.StatusOK, gin.H{
+		"data": urls,
+		"pagination": gin.H{
+			"page":        page,
+			"size":        pageSize,
+			"total":       total,
+			"total_pages": math.Ceil(float64(total) / float64(pageSize)),
+		},
+	})
 }
 
 func (u *UrlController) UpdateUrl(c *gin.Context) {

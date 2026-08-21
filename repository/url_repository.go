@@ -12,7 +12,7 @@ type UrlRepository interface {
 	FindByIdAndUserId(id uint, userId uint) (*models.URL, error)
 	FindByShortCode(code string) (*models.URL, error)
 	ExistsByShortCode(code string) (bool, error)
-	FindAllByUserId(userId uint) (*[]models.URL, error)
+	FindAllByUserId(userId uint, page, pageSize int) (*[]models.URL, int64, error)
 	CountByUserId(userId uint) (int64, error)
 	Update(url *models.URL) error
 	UpdateIsActive(id uint, isActive bool) error
@@ -73,14 +73,29 @@ func (u *urlRepository) FindByShortCode(code string) (*models.URL, error) {
 	return &url, nil
 }
 
-func (u *urlRepository) FindAllByUserId(userId uint) (*[]models.URL, error) {
+func (u *urlRepository) FindAllByUserId(userId uint, page, pageSize int) (*[]models.URL, int64, error) {
 	var urls []models.URL
 
-	err := u.db.Where("user_id = ?", userId).Find(&urls).Error
+	offset := (page - 1) * pageSize
+
+	query := u.db.Where("user_id = ?", userId)
+
+	err := query.
+		Offset(offset).
+		Limit(pageSize).
+		Order("created_at desc").
+		Find(&urls).Error
+
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return &urls, nil
+
+	var total int64
+	if err := query.Model(&models.URL{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return &urls, total, nil
 }
 
 func (u *urlRepository) CountByUserId(userId uint) (int64, error) {
