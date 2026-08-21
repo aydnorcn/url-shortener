@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"time"
 	"url-shortener/config"
 	"url-shortener/controller"
 	"url-shortener/middleware"
@@ -14,16 +15,14 @@ import (
 func SetupRouter(db *gorm.DB, cfg config.Config) *gin.Engine {
 	r := gin.Default()
 	r.Use(middleware.ErrorHandlerMiddleware())
+	r.Use(middleware.NewRateLimiter(6, time.Minute).LimitMiddleware())
 
-	//TODO: User and url repo
 	userRepo := repository.NewUserRepository(db)
 	urlRepo := repository.NewUrlRepository(db)
 
-	//TODO: User and url service
 	authService := service.NewAuthService(userRepo, &cfg)
 	urlService := service.NewUrlService(urlRepo)
 
-	//TODO: User and url controller
 	authController := controller.NewAuthController(authService)
 	urlController := controller.NewUrlController(urlService)
 
