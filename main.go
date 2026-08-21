@@ -6,9 +6,12 @@ import (
 	"url-shortener/config"
 	"url-shortener/models"
 	"url-shortener/routes"
+	"url-shortener/validator"
 )
 
 func main() {
+	// Initialize validation engine
+	validator.Init()
 
 	cfg := config.Load()
 
@@ -19,6 +22,8 @@ func main() {
 		cfg.DBPassword,
 		cfg.DBName,
 	)
+
+	//redisClient := config.NewRedis()
 
 	if err != nil {
 		log.Fatal(err)
