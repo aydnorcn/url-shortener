@@ -23,7 +23,7 @@ func main() {
 		cfg.DBName,
 	)
 
-	//redisClient := config.NewRedis()
+	redisClient := config.NewRedis()
 
 	if err != nil {
 		log.Fatal(err)
@@ -36,7 +36,7 @@ func main() {
 	}
 
 	log.Println("Database migrated successfully")
-	router := routes.SetupRouter(db, cfg)
+	router := routes.SetupRouter(db, cfg, redisClient)
 
 	serverAddr := ":" + cfg.ServerPort
 	fmt.Println("Listening on ", serverAddr)

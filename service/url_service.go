@@ -1,6 +1,8 @@
 package service
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"time"
 	"url-shortener/appErrors"
@@ -8,6 +10,8 @@ import (
 	"url-shortener/models"
 	"url-shortener/repository"
 	"url-shortener/utils"
+
+	"github.com/redis/go-redis/v9"
 )
 
 type UrlService interface {
@@ -18,16 +22,18 @@ type UrlService interface {
 	DeleteUrl(userId uint, urlId uint) error
 	ActivateUrl(userId uint, urlId uint) error
 	DeactivateUrl(userId uint, urlId uint) error
-	Redirect(shortCode string) (string, error)
+	Redirect(shortCode string, ctx context.Context) (string, error)
 }
 
 type urlService struct {
 	urlRepo repository.UrlRepository
+	redis   *redis.Client
 }
 
-func NewUrlService(urlRepo repository.UrlRepository) UrlService {
+func NewUrlService(urlRepo repository.UrlRepository, redis *redis.Client) UrlService {
 	return &urlService{
 		urlRepo: urlRepo,
+		redis:   redis,
 	}
 }
 
@@ -163,7 +169,22 @@ func (u *urlService) DeactivateUrl(userId uint, urlId uint) error {
 	return nil
 }
 
-func (u *urlService) Redirect(shortCode string) (string, error) {
+func (u *urlService) Redirect(shortCode string, ctx context.Context) (string, error) {
+
+	key := "url:" + shortCode
+
+	originalUrl, err := u.redis.Get(ctx, key).Result()
+
+	if err == nil {
+		// Cache HIT
+		return originalUrl, nil
+	}
+
+	if !errors.Is(err, redis.Nil) {
+		return "", err
+	}
+
+	// Cache MISS
 	url, err := u.urlRepo.FindByShortCode(shortCode)
 
 	if err != nil {
@@ -188,6 +209,17 @@ func (u *urlService) Redirect(shortCode string) (string, error) {
 			Message: "Url already expired",
 			Status:  http.StatusNoContent,
 		}
+	}
+
+	err = u.redis.Set(
+		ctx,
+		key,
+		url.OriginalURL,
+		10*time.Minute,
+	).Err()
+
+	if err != nil {
+		return "", err
 	}
 
 	return url.OriginalURL, nil

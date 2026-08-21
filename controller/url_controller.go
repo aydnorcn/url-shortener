@@ -191,7 +191,7 @@ func (u *UrlController) DeactivateUrl(c *gin.Context) {
 func (u *UrlController) Redirect(c *gin.Context) {
 	shortCode := c.Param("shortCode")
 
-	originalUrl, err := u.urlService.Redirect(shortCode)
+	originalUrl, err := u.urlService.Redirect(shortCode, c.Request.Context())
 	if err != nil {
 		c.Error(err)
 		return

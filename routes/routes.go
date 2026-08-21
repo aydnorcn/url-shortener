@@ -9,10 +9,11 @@ import (
 	"url-shortener/service"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
-func SetupRouter(db *gorm.DB, cfg config.Config) *gin.Engine {
+func SetupRouter(db *gorm.DB, cfg config.Config, redis *redis.Client) *gin.Engine {
 	r := gin.Default()
 	r.Use(middleware.ErrorHandlerMiddleware())
 	r.Use(middleware.NewRateLimiter(6, time.Minute).LimitMiddleware())
@@ -21,7 +22,7 @@ func SetupRouter(db *gorm.DB, cfg config.Config) *gin.Engine {
 	urlRepo := repository.NewUrlRepository(db)
 
 	authService := service.NewAuthService(userRepo, &cfg)
-	urlService := service.NewUrlService(urlRepo)
+	urlService := service.NewUrlService(urlRepo, redis)
 
 	authController := controller.NewAuthController(authService)
 	urlController := controller.NewUrlController(urlService)
