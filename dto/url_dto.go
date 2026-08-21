@@ -3,15 +3,15 @@ package dto
 import "time"
 
 type CreateUrlRequest struct {
-	OriginalUrl string `json:"original_url" binding:"required"`
-	ExpiresAt   *time.Time
-	CustomAlias *string `json:"custom_alias"`
+	OriginalUrl string     `json:"original_url" validate:"required,url"`
+	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
+	CustomAlias *string    `json:"custom_alias,omitempty" validate:"omitempty"`
 }
 
 type UpdateUrlRequest struct {
-	OriginalUrl string     `json:"original_url"`
-	ExpiresAt   *time.Time `json:"expires_at"`
-	IsActive    *bool      `json:"is_active"`
+	OriginalUrl string     `json:"original_url,omitempty" validate:"omitempty,url"`
+	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
+	IsActive    *bool      `json:"is_active,omitempty"`
 }
 
 type UrlResponse struct {
