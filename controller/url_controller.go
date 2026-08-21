@@ -3,9 +3,11 @@ package controller
 import (
 	"net/http"
 	"strconv"
+	"url-shortener/appErrors"
 	"url-shortener/dto"
 	"url-shortener/middleware"
 	"url-shortener/service"
+	"url-shortener/validator"
 
 	"github.com/gin-gonic/gin"
 )
@@ -21,106 +23,116 @@ func NewUrlController(urlService service.UrlService) *UrlController {
 func (u *UrlController) CreateUrl(c *gin.Context) {
 	var req dto.CreateUrlRequest
 
-	if err := c.ShouldBind(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(appErrors.ErrInvalidJSON)
+		return
+	}
+
+	if err := validator.ValidateStruct(req); err != nil {
+		c.Error(err)
 		return
 	}
 
 	userId, ok := middleware.GetCurrentUserID(c)
-
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		c.Error(appErrors.ErrUnauthorized)
 		return
 	}
 
 	url, err := u.urlService.CreateUrl(userId, req)
-
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	c.JSON(http.StatusOK, &url)
+	c.JSON(http.StatusOK, url)
 }
 
 func (u *UrlController) GetUrl(c *gin.Context) {
 	userId, ok := middleware.GetCurrentUserID(c)
-
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		c.Error(appErrors.ErrUnauthorized)
 		return
 	}
 
 	urlId := c.Param("id")
-	urlIdInt, _ := strconv.ParseUint(urlId, 0, 64)
-	url, err := u.urlService.GetUrl(userId, uint(urlIdInt))
+	urlIdInt, err := strconv.ParseUint(urlId, 10, 64)
+	if err != nil {
+		c.Error(appErrors.NewBadRequestError("Geçersiz URL ID"))
+		return
+	}
 
+	url, err := u.urlService.GetUrl(userId, uint(urlIdInt))
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	c.JSON(http.StatusOK, &url)
+	c.JSON(http.StatusOK, url)
 }
 
 func (u *UrlController) GetAllUrls(c *gin.Context) {
 	userId, ok := middleware.GetCurrentUserID(c)
-
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		c.Error(appErrors.ErrUnauthorized)
 		return
 	}
 
 	urls, err := u.urlService.GetUserUrls(userId)
-
 	if err != nil {
 		c.Error(err)
 		return
 	}
-	c.JSON(http.StatusOK, &urls)
+
+	c.JSON(http.StatusOK, urls)
 }
 
 func (u *UrlController) UpdateUrl(c *gin.Context) {
 	var req dto.UpdateUrlRequest
 
-	if err := c.ShouldBind(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(appErrors.ErrInvalidJSON)
+		return
+	}
+
+	if err := validator.ValidateStruct(req); err != nil {
+		c.Error(err)
 		return
 	}
 
 	userId, ok := middleware.GetCurrentUserID(c)
-
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		c.Error(appErrors.ErrUnauthorized)
 		return
 	}
 
 	urlId := c.Param("id")
+	id, err := strconv.ParseUint(urlId, 10, 64)
+	if err != nil {
+		c.Error(appErrors.NewBadRequestError("Geçersiz URL ID"))
+		return
+	}
 
-	asd, _ := strconv.ParseUint(urlId, 0, 64)
-
-	url, err := u.urlService.UpdateUrl(userId, uint(asd), req)
-
+	url, err := u.urlService.UpdateUrl(userId, uint(id), req)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	c.JSON(http.StatusOK, &url)
+	c.JSON(http.StatusOK, url)
 }
 
 func (u *UrlController) DeleteUrl(c *gin.Context) {
-
-	urlId := c.Param("id")
-	id, err := strconv.ParseUint(urlId, 0, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	userId, ok := middleware.GetCurrentUserID(c)
+	if !ok {
+		c.Error(appErrors.ErrUnauthorized)
+		return
 	}
 
-	userId, ok := middleware.GetCurrentUserID(c)
-
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+	urlId := c.Param("id")
+	id, err := strconv.ParseUint(urlId, 10, 64)
+	if err != nil {
+		c.Error(appErrors.NewBadRequestError("Geçersiz URL ID"))
 		return
 	}
 
@@ -133,16 +145,16 @@ func (u *UrlController) DeleteUrl(c *gin.Context) {
 }
 
 func (u *UrlController) ActivateUrl(c *gin.Context) {
-	urlId := c.Param("id")
-	id, err := strconv.ParseUint(urlId, 0, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	userId, ok := middleware.GetCurrentUserID(c)
+	if !ok {
+		c.Error(appErrors.ErrUnauthorized)
+		return
 	}
 
-	userId, ok := middleware.GetCurrentUserID(c)
-
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+	urlId := c.Param("id")
+	id, err := strconv.ParseUint(urlId, 10, 64)
+	if err != nil {
+		c.Error(appErrors.NewBadRequestError("Geçersiz URL ID"))
 		return
 	}
 
@@ -150,20 +162,21 @@ func (u *UrlController) ActivateUrl(c *gin.Context) {
 		c.Error(err)
 		return
 	}
+
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
 func (u *UrlController) DeactivateUrl(c *gin.Context) {
-	urlId := c.Param("id")
-	id, err := strconv.ParseUint(urlId, 0, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	userId, ok := middleware.GetCurrentUserID(c)
+	if !ok {
+		c.Error(appErrors.ErrUnauthorized)
+		return
 	}
 
-	userId, ok := middleware.GetCurrentUserID(c)
-
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+	urlId := c.Param("id")
+	id, err := strconv.ParseUint(urlId, 10, 64)
+	if err != nil {
+		c.Error(appErrors.NewBadRequestError("Geçersiz URL ID"))
 		return
 	}
 
@@ -171,6 +184,7 @@ func (u *UrlController) DeactivateUrl(c *gin.Context) {
 		c.Error(err)
 		return
 	}
+
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
@@ -178,7 +192,6 @@ func (u *UrlController) Redirect(c *gin.Context) {
 	shortCode := c.Param("shortCode")
 
 	originalUrl, err := u.urlService.Redirect(shortCode)
-
 	if err != nil {
 		c.Error(err)
 		return

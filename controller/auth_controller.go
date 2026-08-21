@@ -2,8 +2,10 @@ package controller
 
 import (
 	"net/http"
+	"url-shortener/appErrors"
 	"url-shortener/dto"
 	"url-shortener/service"
+	"url-shortener/validator"
 
 	"github.com/gin-gonic/gin"
 )
@@ -21,31 +23,39 @@ func NewAuthController(authService service.AuthService) *AuthController {
 func (authController *AuthController) Login(c *gin.Context) {
 	var req dto.LoginRequest
 
-	if err := c.ShouldBind(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(appErrors.ErrInvalidJSON)
+		return
+	}
+
+	if err := validator.ValidateStruct(req); err != nil {
+		c.Error(err)
 		return
 	}
 
 	user, err := authController.authService.Login(req)
-
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	c.JSON(http.StatusOK, &user)
+	c.JSON(http.StatusOK, user)
 }
 
 func (authController *AuthController) Register(c *gin.Context) {
 	var req dto.RegisterRequest
 
-	if err := c.ShouldBind(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(appErrors.ErrInvalidJSON)
+		return
+	}
+
+	if err := validator.ValidateStruct(req); err != nil {
+		c.Error(err)
 		return
 	}
 
 	err := authController.authService.Register(req)
-
 	if err != nil {
 		c.Error(err)
 		return
