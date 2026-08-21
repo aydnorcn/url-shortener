@@ -15,6 +15,7 @@ type UrlRepository interface {
 	FindAllByUserId(userId uint) (*[]models.URL, error)
 	CountByUserId(userId uint) (int64, error)
 	Update(url *models.URL) error
+	UpdateIsActive(id uint, isActive bool) error
 	SoftDelete(url *models.URL) error
 	SetActive(url *models.URL) error
 }
@@ -98,6 +99,13 @@ func (u *urlRepository) Update(url *models.URL) error {
 		return err
 	}
 	return nil
+}
+
+func (u *urlRepository) UpdateIsActive(id uint, isActive bool) error {
+	return u.db.
+		Model(&models.URL{}).
+		Where("id = ?", id).
+		Update("is_active", isActive).Error
 }
 
 func (u *urlRepository) SoftDelete(url *models.URL) error {

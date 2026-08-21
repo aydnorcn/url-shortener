@@ -2,6 +2,7 @@ package service
 
 import (
 	"net/http"
+	"time"
 	"url-shortener/appErrors"
 	"url-shortener/dto"
 	"url-shortener/models"
@@ -167,6 +168,26 @@ func (u *urlService) Redirect(shortCode string) (string, error) {
 
 	if err != nil {
 		return "", appErrors.ErrURLNotFound
+	}
+
+	if url.IsDeleted || !url.IsActive {
+		return "", &appErrors.AppError{
+			Code:    "URL_ALREADY_DELETED",
+			Message: "Url already deleted",
+			Status:  http.StatusNoContent,
+		}
+	}
+
+	if url.ExpiresAt != nil && !url.ExpiresAt.After(time.Now()) {
+		url.IsActive = false
+		if err := u.urlRepo.UpdateIsActive(url.ID, false); err != nil {
+			return "", appErrors.ErrServerError
+		}
+		return "", &appErrors.AppError{
+			Code:    "URL_EXPIRES_ALREADY",
+			Message: "Url already expired",
+			Status:  http.StatusNoContent,
+		}
 	}
 
 	return url.OriginalURL, nil
