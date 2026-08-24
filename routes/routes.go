@@ -10,6 +10,7 @@ import (
 	"url-shortener/worker"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
@@ -19,6 +20,7 @@ func SetupRouter(db *gorm.DB, cfg config.Config, redis *redis.Client, analyticsW
 	r.Use(middleware.CORSMiddleware())
 	r.Use(middleware.ErrorHandlerMiddleware())
 	r.Use(middleware.NewRateLimiter(60, time.Minute).LimitMiddleware())
+	r.Use(middleware.MetricsMiddleware())
 
 	// Serve frontend website
 	r.Static("/static", "./static")
@@ -39,6 +41,8 @@ func SetupRouter(db *gorm.DB, cfg config.Config, redis *redis.Client, analyticsW
 
 	// Root redirect endpoint
 	r.GET("/:shortCode", urlController.Redirect)
+
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// API routes
 	api := r.Group("/api")

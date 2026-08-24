@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"url-shortener/config"
+	"url-shortener/metrics"
 	"url-shortener/models"
 	"url-shortener/repository"
 	"url-shortener/routes"
@@ -31,6 +32,7 @@ func main() {
 	}
 
 	redisClient := config.NewRedis()
+	metrics.Init()
 
 	// Auto-migrate models including URLClick
 	err = db.AutoMigrate(&models.URL{}, &models.User{}, &models.URLClick{})

@@ -7,6 +7,7 @@ import (
 	"time"
 	"url-shortener/appErrors"
 	"url-shortener/dto"
+	"url-shortener/metrics"
 	"url-shortener/middleware"
 	"url-shortener/service"
 	"url-shortener/utils"
@@ -237,5 +238,6 @@ func (u *UrlController) Redirect(c *gin.Context) {
 		u.worker.Process(event)
 	}
 
+	metrics.URLRedirectsTotal.Inc()
 	c.Redirect(http.StatusFound, url.OriginalURL)
 }

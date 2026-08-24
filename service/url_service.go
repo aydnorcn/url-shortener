@@ -8,6 +8,7 @@ import (
 	"time"
 	"url-shortener/appErrors"
 	"url-shortener/dto"
+	"url-shortener/metrics"
 	"url-shortener/models"
 	"url-shortener/repository"
 	"url-shortener/utils"
@@ -215,6 +216,7 @@ func (u *urlService) Redirect(shortCode string, ctx context.Context) (*models.UR
 					}
 				}
 
+				metrics.CacheHitsTotal.Inc()
 				return &models.URL{
 					ID:          cached.ID,
 					OriginalURL: cached.OriginalURL,
@@ -267,6 +269,8 @@ func (u *urlService) Redirect(shortCode string, ctx context.Context) (*models.UR
 			_ = u.redis.Set(ctx, key, string(cachedJSON), 10*time.Minute).Err()
 		}
 	}
+
+	metrics.CacheMissesTotal.Inc()
 
 	return url, nil
 }
