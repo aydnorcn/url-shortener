@@ -4,21 +4,28 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"time"
 	"url-shortener/appErrors"
 	"url-shortener/dto"
 	"url-shortener/middleware"
 	"url-shortener/service"
+	"url-shortener/utils"
 	"url-shortener/validator"
+	"url-shortener/worker"
 
 	"github.com/gin-gonic/gin"
 )
 
 type UrlController struct {
 	urlService service.UrlService
+	worker     worker.AnalyticsWorker
 }
 
-func NewUrlController(urlService service.UrlService) *UrlController {
-	return &UrlController{urlService: urlService}
+func NewUrlController(urlService service.UrlService, worker worker.AnalyticsWorker) *UrlController {
+	return &UrlController{
+		urlService: urlService,
+		worker:     worker,
+	}
 }
 
 func (u *UrlController) CreateUrl(c *gin.Context) {
@@ -210,11 +217,25 @@ func (u *UrlController) DeactivateUrl(c *gin.Context) {
 func (u *UrlController) Redirect(c *gin.Context) {
 	shortCode := c.Param("shortCode")
 
-	originalUrl, err := u.urlService.Redirect(shortCode, c.Request.Context())
+	url, err := u.urlService.Redirect(shortCode, c.Request.Context())
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	c.Redirect(http.StatusFound, originalUrl)
+	// Record click event asynchronously through worker pool
+	if u.worker != nil {
+		event := dto.ClickEvent{
+			URLID:     url.ID,
+			IPAddress: c.ClientIP(),
+			UserAgent: c.Request.UserAgent(),
+			Referer:   c.Request.Referer(),
+			Country:   utils.ParseCountry(c),
+			Device:    utils.ParseDevice(c.Request.UserAgent()),
+			Timestamp: time.Now(),
+		}
+		u.worker.Process(event)
+	}
+
+	c.Redirect(http.StatusFound, url.OriginalURL)
 }

@@ -1,0 +1,1080 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GoShort - Fast & Smart URL Shortener</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              200: '#c7d2fe',
+              300: '#a5b4fc',
+              400: '#818cf8',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              800: '#3730a3',
+              900: '#312e81',
+              950: '#1e1b4b',
+            },
+            dark: {
+              bg: '#0b0f19',
+              card: '#111827',
+              border: '#1f2937',
+              input: '#1a2234',
+              hover: '#243048',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- QRCode.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body class="bg-[#0b0f19] text-slate-100 min-h-screen flex flex-col font-sans selection:bg-indigo-500 selection:text-white antialiased">
+
+  <!-- Background Decorative Gradient Glows -->
+  <div class="fixed inset-0 pointer-events-none overflow-hidden z-0">
+    <div class="absolute -top-40 left-1/4 w-96 h-96 bg-indigo-600/20 rounded-full blur-3xl"></div>
+    <div class="absolute top-1/3 -right-20 w-96 h-96 bg-purple-600/15 rounded-full blur-3xl"></div>
+    <div class="absolute -bottom-20 left-1/3 w-96 h-96 bg-blue-600/15 rounded-full blur-3xl"></div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-3 max-w-sm pointer-events-none"></div>
+
+  <!-- Header / Navbar -->
+  <header class="sticky top-0 z-40 backdrop-blur-md bg-[#0b0f19]/80 border-b border-slate-800">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      
+      <!-- Brand Logo -->
+      <a href="#" onclick="app.switchTab('home')" class="flex items-center gap-2.5 group">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-500 flex items-center justify-center shadow-lg shadow-indigo-500/25 group-hover:scale-105 transition-transform duration-200">
+          <i data-lucide="link-2" class="w-5 h-5 text-white stroke-[2.5]"></i>
+        </div>
+        <div>
+          <span class="text-xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-100 to-indigo-300">
+            Go<span class="text-indigo-400">Short</span>
+          </span>
+          <span class="hidden sm:inline-block ml-2 text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+            v1.0 API
+          </span>
+        </div>
+      </a>
+
+      <!-- Navigation Tabs -->
+      <nav class="hidden md:flex items-center gap-1 bg-slate-900/90 p-1 rounded-xl border border-slate-800/80">
+        <button id="nav-home" onclick="app.switchTab('home')" class="nav-btn active px-3.5 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+          <i data-lucide="home" class="w-4 h-4"></i> Shortener
+        </button>
+        <button id="nav-dashboard" onclick="app.switchTab('dashboard')" class="nav-btn px-3.5 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+          <i data-lucide="layout-dashboard" class="w-4 h-4"></i> My Links
+        </button>
+        <button id="nav-api" onclick="app.switchTab('api')" class="nav-btn px-3.5 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+          <i data-lucide="terminal" class="w-4 h-4"></i> API Explorer
+        </button>
+      </nav>
+
+      <!-- Right Header Actions (Auth / Status) -->
+      <div class="flex items-center gap-3">
+        <!-- Live Health Status Indicator -->
+        <div id="health-badge" onclick="app.checkHealth(true)" title="Click to refresh server health" class="cursor-pointer hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-full bg-slate-800/80 border border-slate-700/60 text-xs font-medium hover:bg-slate-800 transition-colors">
+          <span class="relative flex h-2 w-2">
+            <span id="health-ping" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span id="health-dot" class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+          </span>
+          <span id="health-text" class="text-slate-300">Checking API...</span>
+        </div>
+
+        <!-- Auth Controls Container -->
+        <div id="auth-controls" class="flex items-center gap-2">
+          <!-- Guest State -->
+          <div id="guest-nav" class="flex items-center gap-2">
+            <button onclick="app.openAuthModal('login')" class="px-3.5 py-1.5 text-sm font-medium text-slate-300 hover:text-white transition-colors">
+              Sign In
+            </button>
+            <button onclick="app.openAuthModal('register')" class="px-3.5 py-1.5 text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg shadow-sm shadow-indigo-600/30 transition-all">
+              Sign Up
+            </button>
+          </div>
+
+          <!-- Logged In State -->
+          <div id="user-nav" class="hidden flex items-center gap-3">
+            <div class="flex items-center gap-2 px-3 py-1.5 bg-slate-800/80 border border-slate-700/60 rounded-xl text-xs">
+              <div class="w-6 h-6 rounded-full bg-indigo-600/30 border border-indigo-500/40 flex items-center justify-center text-indigo-300 font-bold">
+                <i data-lucide="user" class="w-3.5 h-3.5"></i>
+              </div>
+              <span id="user-email-display" class="font-medium text-slate-200 max-w-[140px] truncate">user@example.com</span>
+            </div>
+            <button onclick="app.logout()" title="Logout" class="p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-slate-800 hover:border-rose-500/20 transition-colors">
+              <i data-lucide="log-out" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
+
+    <!-- ================================================================= -->
+    <!-- TAB 1: HOME / URL SHORTENER HERO                                  -->
+    <!-- ================================================================= -->
+    <section id="tab-home" class="tab-content transition-opacity duration-200">
+      
+      <!-- Hero Headline -->
+      <div class="text-center max-w-3xl mx-auto pt-4 pb-10">
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs font-semibold uppercase tracking-wider mb-6">
+          <i data-lucide="sparkles" class="w-3.5 h-3.5 text-indigo-400"></i>
+          High Performance Go + Redis Powered Engine
+        </div>
+        <h1 class="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white leading-tight">
+          Smarter, Faster & <br />
+          <span class="bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 via-purple-300 to-pink-400">
+            Measurable Short Links
+          </span>
+        </h1>
+        <p class="mt-4 text-base sm:text-lg text-slate-400 max-w-2xl mx-auto leading-relaxed">
+          Create custom branded URLs, track real-time analytics with country & device insights, and manage link lifecycles in one clean dashboard.
+        </p>
+      </div>
+
+      <!-- Shortener Box Card -->
+      <div class="max-w-3xl mx-auto bg-slate-900/90 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl shadow-black/40 backdrop-blur-xl relative">
+        <form id="shorten-form" onsubmit="app.handleCreateUrl(event)" class="space-y-4">
+          
+          <!-- Primary Input -->
+          <div class="relative flex flex-col sm:flex-row gap-3">
+            <div class="relative flex-1">
+              <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
+                <i data-lucide="link" class="w-5 h-5"></i>
+              </div>
+              <input
+                type="url"
+                id="original-url-input"
+                required
+                placeholder="Paste your long link here (e.g. https://github.com/gin-gonic/gin)..."
+                class="w-full pl-11 pr-4 py-3.5 bg-slate-800/90 border border-slate-700 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm sm:text-base transition-all"
+              />
+            </div>
+            <button
+              type="submit"
+              id="shorten-btn"
+              class="px-6 py-3.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/25 flex items-center justify-center gap-2 transition-all transform active:scale-95"
+            >
+              <i data-lucide="scissors" class="w-4 h-4"></i>
+              <span>Shorten URL</span>
+            </button>
+          </div>
+
+          <!-- Advanced Toggle & Fields -->
+          <div class="pt-2">
+            <button
+              type="button"
+              onclick="app.toggleAdvancedOptions()"
+              class="text-xs font-medium text-indigo-400 hover:text-indigo-300 flex items-center gap-1.5 transition-colors"
+            >
+              <i data-lucide="sliders-horizontal" class="w-3.5 h-3.5"></i>
+              <span>Customize Slug & Expiration</span>
+              <i id="advanced-chevron" data-lucide="chevron-down" class="w-3.5 h-3.5 transition-transform duration-200"></i>
+            </button>
+
+            <!-- Collapsible Settings -->
+            <div id="advanced-options" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-800/80">
+              <!-- Custom Alias -->
+              <div>
+                <label for="custom-alias-input" class="block text-xs font-medium text-slate-300 mb-1">
+                  Custom Alias <span class="text-slate-500 font-normal">(optional, 3-30 chars)</span>
+                </label>
+                <div class="relative">
+                  <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-xs text-slate-400 font-mono">/</span>
+                  <input
+                    type="text"
+                    id="custom-alias-input"
+                    placeholder="my-cool-link"
+                    pattern="^[a-zA-Z0-9_-]{3,30}$"
+                    title="3-30 alphanumeric characters, underscores or hyphens"
+                    class="w-full pl-7 pr-3 py-2 bg-slate-800/70 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <!-- Expiration Date -->
+              <div>
+                <label for="expires-at-input" class="block text-xs font-medium text-slate-300 mb-1">
+                  Expiration Date <span class="text-slate-500 font-normal">(optional)</span>
+                </label>
+                <input
+                  type="datetime-local"
+                  id="expires-at-input"
+                  class="w-full px-3 py-2 bg-slate-800/70 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+            </div>
+          </div>
+        </form>
+
+        <!-- Live Created Result Display -->
+        <div id="result-container" class="hidden mt-6 pt-6 border-t border-slate-800">
+          <div class="p-4 rounded-xl bg-slate-800/60 border border-indigo-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  <i data-lucide="check" class="w-3 h-3"></i> Ready
+                </span>
+                <span class="text-xs text-slate-400" id="result-created-time">Just now</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <a id="result-short-link" href="#" target="_blank" class="text-indigo-400 hover:text-indigo-300 font-semibold text-lg font-mono truncate">
+                  http://localhost:8080/xyz
+                </a>
+              </div>
+              <p id="result-original-link" class="text-xs text-slate-400 truncate mt-0.5 max-w-md">
+                https://very-long-destination-url.com
+              </p>
+            </div>
+
+            <!-- Result Actions -->
+            <div class="flex items-center gap-2 w-full sm:w-auto">
+              <button
+                id="result-copy-btn"
+                onclick="app.copyResultLink()"
+                class="flex-1 sm:flex-initial px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors shadow-sm"
+              >
+                <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                <span id="result-copy-text">Copy Link</span>
+              </button>
+              <button
+                id="result-qr-btn"
+                onclick="app.showQrModal(app.latestCreatedUrl)"
+                title="View QR Code"
+                class="p-2 rounded-lg bg-slate-700/60 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-colors"
+              >
+                <i data-lucide="qr-code" class="w-4 h-4"></i>
+              </button>
+              <button
+                id="result-analytics-btn"
+                onclick="app.openAnalyticsModal(app.latestCreatedUrl.ID || app.latestCreatedUrl.id, app.latestCreatedUrl.ShortCode || app.latestCreatedUrl.short_code)"
+                title="View Analytics"
+                class="p-2 rounded-lg bg-slate-700/60 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-colors"
+              >
+                <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Feature Grid Highlights -->
+      <div class="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6 mt-16">
+        <div class="p-6 rounded-2xl bg-slate-900/60 border border-slate-800/80 backdrop-blur-sm">
+          <div class="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-4">
+            <i data-lucide="zap" class="w-5 h-5"></i>
+          </div>
+          <h3 class="text-base font-semibold text-white mb-2">Redis-Accelerated Redirects</h3>
+          <p class="text-sm text-slate-400">Sub-millisecond redirect lookups backed by Redis in-memory cache with fallback to PostgreSQL.</p>
+        </div>
+
+        <div class="p-6 rounded-2xl bg-slate-900/60 border border-slate-800/80 backdrop-blur-sm">
+          <div class="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 mb-4">
+            <i data-lucide="activity" class="w-5 h-5"></i>
+          </div>
+          <h3 class="text-base font-semibold text-white mb-2">Async Worker Analytics</h3>
+          <p class="text-sm text-slate-400">Buffered non-blocking background worker pool capturing device types, client IP, referers, and geographic telemetry.</p>
+        </div>
+
+        <div class="p-6 rounded-2xl bg-slate-900/60 border border-slate-800/80 backdrop-blur-sm">
+          <div class="w-10 h-10 rounded-xl bg-pink-500/10 border border-pink-500/20 flex items-center justify-center text-pink-400 mb-4">
+            <i data-lucide="shield-check" class="w-5 h-5"></i>
+          </div>
+          <h3 class="text-base font-semibold text-white mb-2">Security & Control</h3>
+          <p class="text-sm text-slate-400">JWT authentication, IP-based sliding window rate limiting (60 req/min), custom alias collision checking, and expiration management.</p>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- TAB 2: MY LINKS / MANAGEMENT DASHBOARD                            -->
+    <!-- ================================================================= -->
+    <section id="tab-dashboard" class="tab-content hidden transition-opacity duration-200">
+      
+      <!-- Dashboard Header -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div>
+          <h2 class="text-2xl font-bold text-white flex items-center gap-2">
+            <i data-lucide="link" class="w-6 h-6 text-indigo-400"></i>
+            Link Management
+          </h2>
+          <p class="text-sm text-slate-400">Manage, inspect, activate, deactivate, or delete your shortened links.</p>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <button onclick="app.loadUrls(1)" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium border border-slate-700 flex items-center gap-1.5 transition-colors">
+            <i data-lucide="refresh-cw" class="w-4 h-4"></i> Refresh
+          </button>
+          <button onclick="app.switchTab('home')" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium flex items-center gap-1.5 transition-colors shadow-sm shadow-indigo-600/30">
+            <i data-lucide="plus" class="w-4 h-4"></i> Create New Link
+          </button>
+        </div>
+      </div>
+
+      <!-- Quick Metrics Ribbon -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center gap-3.5">
+          <div class="w-10 h-10 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+            <i data-lucide="link-2" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div id="stat-total-links" class="text-xl font-bold text-white">0</div>
+            <div class="text-xs text-slate-400">Total Links</div>
+          </div>
+        </div>
+
+        <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center gap-3.5">
+          <div class="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+            <i data-lucide="check-circle-2" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div id="stat-active-links" class="text-xl font-bold text-emerald-400">0</div>
+            <div class="text-xs text-slate-400">Active Links</div>
+          </div>
+        </div>
+
+        <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center gap-3.5">
+          <div class="w-10 h-10 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+            <i data-lucide="pause-circle" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div id="stat-inactive-links" class="text-xl font-bold text-amber-400">0</div>
+            <div class="text-xs text-slate-400">Inactive Links</div>
+          </div>
+        </div>
+
+        <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center gap-3.5">
+          <div class="w-10 h-10 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
+            <i data-lucide="mouse-pointer-click" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div id="stat-current-page" class="text-xl font-bold text-purple-400">Page 1</div>
+            <div class="text-xs text-slate-400">Current View</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Auth Required Notification when Guest -->
+      <div id="dashboard-guest-prompt" class="hidden p-8 rounded-2xl bg-slate-900/90 border border-indigo-500/30 text-center max-w-xl mx-auto my-12">
+        <div class="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 mx-auto mb-4">
+          <i data-lucide="lock" class="w-6 h-6"></i>
+        </div>
+        <h3 class="text-lg font-bold text-white mb-2">Authentication Required</h3>
+        <p class="text-sm text-slate-400 mb-6">Please log in or create an account to view and manage your private link catalog and access analytics.</p>
+        <div class="flex items-center justify-center gap-3">
+          <button onclick="app.openAuthModal('login')" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-xl transition-colors">
+            Sign In
+          </button>
+          <button onclick="app.openAuthModal('register')" class="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium rounded-xl border border-slate-700 transition-colors">
+            Create Account
+          </button>
+        </div>
+      </div>
+
+      <!-- Links Table Container -->
+      <div id="dashboard-content" class="bg-slate-900/90 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+        
+        <!-- Table Toolbar -->
+        <div class="p-4 border-b border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div class="relative w-full sm:w-80">
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+              <i data-lucide="search" class="w-4 h-4"></i>
+            </div>
+            <input
+              type="text"
+              id="search-links-input"
+              oninput="app.handleSearch(event)"
+              placeholder="Search by slug or target URL..."
+              class="w-full pl-9 pr-3 py-2 bg-slate-800/80 border border-slate-700 rounded-xl text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            />
+          </div>
+
+          <div class="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+            <!-- Filter Status -->
+            <select
+              id="filter-status"
+              onchange="app.handleFilterChange()"
+              class="bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            >
+              <option value="all">All Statuses</option>
+              <option value="active">Active Only</option>
+              <option value="inactive">Inactive Only</option>
+            </select>
+
+            <!-- Page Size -->
+            <select
+              id="page-size"
+              onchange="app.handlePageSizeChange()"
+              class="bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            >
+              <option value="5">5 per page</option>
+              <option value="10" selected>10 per page</option>
+              <option value="25">25 per page</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Links Table -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm text-slate-300">
+            <thead class="bg-slate-950/60 text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-800">
+              <tr>
+                <th scope="col" class="py-3.5 px-4 sm:px-6">Short Link</th>
+                <th scope="col" class="py-3.5 px-4 hidden md:table-cell">Target URL</th>
+                <th scope="col" class="py-3.5 px-4">Status</th>
+                <th scope="col" class="py-3.5 px-4 hidden lg:table-cell">Expiration</th>
+                <th scope="col" class="py-3.5 px-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="links-tbody" class="divide-y divide-slate-800/60 font-sans">
+              <!-- Rendered via JavaScript -->
+              <tr>
+                <td colspan="5" class="text-center py-12 text-slate-500">
+                  <div class="inline-block animate-spin mr-2"><i data-lucide="loader-2" class="w-5 h-5"></i></div>
+                  Loading links...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination Footer -->
+        <div class="p-4 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs sm:text-sm text-slate-400">
+          <div id="pagination-info">
+            Showing <span class="font-semibold text-white">0</span> to <span class="font-semibold text-white">0</span> of <span class="font-semibold text-white">0</span> entries
+          </div>
+
+          <div class="flex items-center gap-1.5" id="pagination-buttons">
+            <button
+              id="prev-page-btn"
+              onclick="app.changePage(app.currentPage - 1)"
+              class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:pointer-events-none text-slate-300 font-medium transition-colors"
+            >
+              Previous
+            </button>
+            <div id="page-numbers" class="flex items-center gap-1"></div>
+            <button
+              id="next-page-btn"
+              onclick="app.changePage(app.currentPage + 1)"
+              class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:pointer-events-none text-slate-300 font-medium transition-colors"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- TAB 3: API EXPLORER & HEALTH CHECK                                -->
+    <!-- ================================================================= -->
+    <section id="tab-api" class="tab-content hidden transition-opacity duration-200">
+      
+      <!-- API Header -->
+      <div class="mb-8">
+        <h2 class="text-2xl font-bold text-white flex items-center gap-2">
+          <i data-lucide="code-2" class="w-6 h-6 text-indigo-400"></i>
+          Backend Endpoints & Interactive Console
+        </h2>
+        <p class="text-sm text-slate-400 mt-1">
+          Explore and directly execute calls against all registered Gin REST API endpoints.
+        </p>
+      </div>
+
+      <!-- Live Health Check Card -->
+      <div class="p-6 rounded-2xl bg-slate-900/90 border border-slate-800 mb-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="px-2.5 py-0.5 rounded text-xs font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              GET /api/health
+            </span>
+            <span class="text-xs text-slate-400">Core Healthcheck Endpoint</span>
+          </div>
+          <div class="mt-2 text-sm text-slate-300">
+            Service: <span id="health-service-name" class="font-semibold text-white">URL SHORTENER SERVICE</span> | 
+            Status: <span id="health-status-value" class="font-semibold text-emerald-400">UP</span> | 
+            Latency: <span id="health-latency" class="font-mono text-indigo-400">-- ms</span>
+          </div>
+        </div>
+        <button
+          onclick="app.checkHealth(true)"
+          class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-white flex items-center gap-2 transition-colors"
+        >
+          <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Test Health Endpoint
+        </button>
+      </div>
+
+      <!-- Endpoints Directory Grid -->
+      <div class="space-y-4" id="api-endpoints-list">
+        
+        <!-- Auth Endpoints -->
+        <div class="border border-slate-800 bg-slate-900/80 rounded-xl p-4">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-bold text-white flex items-center gap-2">
+              <i data-lucide="key" class="w-4 h-4 text-indigo-400"></i> Authentication Endpoints
+            </h3>
+            <span class="text-xs text-slate-500">Public</span>
+          </div>
+          <div class="space-y-2">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg bg-slate-950/60 border border-slate-800/80 text-xs gap-2">
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded font-bold font-mono bg-blue-500/10 text-blue-400 border border-blue-500/20">POST</span>
+                <span class="font-mono text-slate-200">/api/v1/auth/register</span>
+                <span class="text-slate-400">- Register new user account</span>
+              </div>
+              <button onclick="app.prefillApiTester('POST', '/api/v1/auth/register', '{\n  \"email\": \"test@example.com\",\n  \"password\": \"Secret123!\",\n  \"confirm_password\": \"Secret123!\"\n}', false)" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors">Try in Console</button>
+            </div>
+
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg bg-slate-950/60 border border-slate-800/80 text-xs gap-2">
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded font-bold font-mono bg-blue-500/10 text-blue-400 border border-blue-500/20">POST</span>
+                <span class="font-mono text-slate-200">/api/v1/auth/login</span>
+                <span class="text-slate-400">- Login and obtain JWT bearer token</span>
+              </div>
+              <button onclick="app.prefillApiTester('POST', '/api/v1/auth/login', '{\n  \"email\": \"test@example.com\",\n  \"password\": \"Secret123!\"\n}', false)" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors">Try in Console</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- URL Management Endpoints -->
+        <div class="border border-slate-800 bg-slate-900/80 rounded-xl p-4">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-bold text-white flex items-center gap-2">
+              <i data-lucide="link" class="w-4 h-4 text-purple-400"></i> URL Management Endpoints
+            </h3>
+            <span class="text-xs px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">Bearer Auth Required</span>
+          </div>
+          <div class="space-y-2">
+            
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg bg-slate-950/60 border border-slate-800/80 text-xs gap-2">
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded font-bold font-mono bg-blue-500/10 text-blue-400 border border-blue-500/20">POST</span>
+                <span class="font-mono text-slate-200">/api/v1/urls</span>
+                <span class="text-slate-400">- Create shortened URL (optional custom alias & expires_at)</span>
+              </div>
+              <button onclick="app.prefillApiTester('POST', '/api/v1/urls', '{\n  \"original_url\": \"https://github.com\",\n  \"custom_alias\": \"gh-repo\"\n}', true)" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors">Try in Console</button>
+            </div>
+
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg bg-slate-950/60 border border-slate-800/80 text-xs gap-2">
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded font-bold font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">GET</span>
+                <span class="font-mono text-slate-200">/api/v1/urls?page=1&pageSize=10</span>
+                <span class="text-slate-400">- List paginated user URLs</span>
+              </div>
+              <button onclick="app.prefillApiTester('GET', '/api/v1/urls?page=1&pageSize=10', '', true)" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors">Try in Console</button>
+            </div>
+
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg bg-slate-950/60 border border-slate-800/80 text-xs gap-2">
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded font-bold font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">GET</span>
+                <span class="font-mono text-slate-200">/api/v1/urls/:id</span>
+                <span class="text-slate-400">- Fetch single URL metadata by ID</span>
+              </div>
+              <button onclick="app.prefillApiTester('GET', '/api/v1/urls/1', '', true)" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors">Try in Console</button>
+            </div>
+
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg bg-slate-950/60 border border-slate-800/80 text-xs gap-2">
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded font-bold font-mono bg-amber-500/10 text-amber-400 border border-amber-500/20">PATCH</span>
+                <span class="font-mono text-slate-200">/api/v1/urls/:id</span>
+                <span class="text-slate-400">- Update target URL or expiration</span>
+              </div>
+              <button onclick="app.prefillApiTester('PATCH', '/api/v1/urls/1', '{\n  \"original_url\": \"https://golang.org\",\n  \"is_active\": true\n}', true)" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors">Try in Console</button>
+            </div>
+
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg bg-slate-950/60 border border-slate-800/80 text-xs gap-2">
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded font-bold font-mono bg-amber-500/10 text-amber-400 border border-amber-500/20">PATCH</span>
+                <span class="font-mono text-slate-200">/api/v1/urls/:id/activate</span>
+                <span class="text-slate-400">- Activate disabled short URL</span>
+              </div>
+              <button onclick="app.prefillApiTester('PATCH', '/api/v1/urls/1/activate', '', true)" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors">Try in Console</button>
+            </div>
+
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg bg-slate-950/60 border border-slate-800/80 text-xs gap-2">
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded font-bold font-mono bg-amber-500/10 text-amber-400 border border-amber-500/20">PATCH</span>
+                <span class="font-mono text-slate-200">/api/v1/urls/:id/deactivate</span>
+                <span class="text-slate-400">- Deactivate short URL (stops redirects)</span>
+              </div>
+              <button onclick="app.prefillApiTester('PATCH', '/api/v1/urls/1/deactivate', '', true)" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors">Try in Console</button>
+            </div>
+
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg bg-slate-950/60 border border-slate-800/80 text-xs gap-2">
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded font-bold font-mono bg-rose-500/10 text-rose-400 border border-rose-500/20">DELETE</span>
+                <span class="font-mono text-slate-200">/api/v1/urls/:id</span>
+                <span class="text-slate-400">- Soft delete shortened URL</span>
+              </div>
+              <button onclick="app.prefillApiTester('DELETE', '/api/v1/urls/1', '', true)" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors">Try in Console</button>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Analytics & Redirect Endpoints -->
+        <div class="border border-slate-800 bg-slate-900/80 rounded-xl p-4">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-bold text-white flex items-center gap-2">
+              <i data-lucide="bar-chart-2" class="w-4 h-4 text-emerald-400"></i> Analytics & Redirection
+            </h3>
+          </div>
+          <div class="space-y-2">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg bg-slate-950/60 border border-slate-800/80 text-xs gap-2">
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded font-bold font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">GET</span>
+                <span class="font-mono text-slate-200">/api/v1/urls/:id/analytics</span>
+                <span class="text-slate-400">- Total clicks, unique visitors, devices, countries</span>
+              </div>
+              <button onclick="app.prefillApiTester('GET', '/api/v1/urls/1/analytics', '', true)" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors">Try in Console</button>
+            </div>
+
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg bg-slate-950/60 border border-slate-800/80 text-xs gap-2">
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded font-bold font-mono bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">GET</span>
+                <span class="font-mono text-slate-200">/:shortCode</span>
+                <span class="text-slate-400">- 302 Found redirect to original URL + async worker click tracking</span>
+              </div>
+              <span class="text-[11px] text-slate-500">Browser Direct</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Interactive API Console Card -->
+      <div id="interactive-console" class="mt-8 p-6 rounded-2xl bg-slate-900/90 border border-slate-800">
+        <h3 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+          <i data-lucide="play" class="w-5 h-5 text-indigo-400"></i> Interactive Request Runner
+        </h3>
+
+        <form id="api-tester-form" onsubmit="app.executeApiTest(event)" class="space-y-4">
+          <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <div class="sm:col-span-1">
+              <label class="block text-xs text-slate-400 mb-1">HTTP Method</label>
+              <select id="api-method" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm font-semibold text-white focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                <option value="GET">GET</option>
+                <option value="POST">POST</option>
+                <option value="PATCH">PATCH</option>
+                <option value="DELETE">DELETE</option>
+              </select>
+            </div>
+
+            <div class="sm:col-span-3">
+              <label class="block text-xs text-slate-400 mb-1">Endpoint Path</label>
+              <input
+                type="text"
+                id="api-path"
+                value="/api/health"
+                required
+                placeholder="/api/v1/urls"
+                class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm font-mono text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+            </div>
+          </div>
+
+          <div class="flex items-center gap-3">
+            <label class="inline-flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+              <input type="checkbox" id="api-use-auth" checked class="rounded border-slate-700 bg-slate-800 text-indigo-600 focus:ring-indigo-500" />
+              <span>Attach Authorization Header (Bearer JWT)</span>
+            </label>
+          </div>
+
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Request Body (JSON, for POST / PATCH)</label>
+            <textarea
+              id="api-body"
+              rows="4"
+              placeholder="{}"
+              class="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 font-mono text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            ></textarea>
+          </div>
+
+          <button
+            type="submit"
+            id="api-send-btn"
+            class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-xl text-sm flex items-center gap-2 transition-colors"
+          >
+            <i data-lucide="send" class="w-4 h-4"></i> Send Request
+          </button>
+        </form>
+
+        <!-- Response Output -->
+        <div id="api-response-container" class="mt-6 hidden">
+          <div class="flex items-center justify-between text-xs text-slate-400 mb-2">
+            <span>Response Payload</span>
+            <div class="flex items-center gap-3">
+              <span id="api-response-status" class="px-2 py-0.5 rounded font-mono font-bold">200 OK</span>
+              <span id="api-response-time" class="font-mono">-- ms</span>
+            </div>
+          </div>
+          <pre id="api-response-body" class="p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs font-mono text-slate-200 overflow-x-auto max-h-80"></pre>
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- ================================================================= -->
+  <!-- MODAL 1: AUTHENTICATION (SIGN IN / REGISTER)                      -->
+  <!-- ================================================================= -->
+  <div id="auth-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm hidden">
+    <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden p-6 sm:p-8 relative">
+      
+      <!-- Close button -->
+      <button onclick="app.closeAuthModal()" class="absolute top-4 right-4 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+
+      <!-- Modal Tabs (Login / Register) -->
+      <div class="flex border-b border-slate-800 mb-6">
+        <button id="auth-tab-login" onclick="app.switchAuthMode('login')" class="flex-1 pb-3 text-sm font-semibold border-b-2 border-indigo-500 text-white transition-colors">
+          Sign In
+        </button>
+        <button id="auth-tab-register" onclick="app.switchAuthMode('register')" class="flex-1 pb-3 text-sm font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition-colors">
+          Create Account
+        </button>
+      </div>
+
+      <!-- Quick Demo Account Fill Button -->
+      <div class="mb-4">
+        <button
+          type="button"
+          onclick="app.fillDemoCredentials()"
+          class="w-full py-1.5 px-3 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 text-indigo-300 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors"
+        >
+          <i data-lucide="wand-2" class="w-3.5 h-3.5"></i>
+          <span>Fill Test Credentials (e.g. demo@shortener.dev / Demo123!)</span>
+        </button>
+      </div>
+
+      <!-- Login Form -->
+      <form id="login-form" onsubmit="app.handleLogin(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Email Address</label>
+          <input
+            type="email"
+            id="login-email"
+            required
+            placeholder="name@example.com"
+            class="w-full px-3.5 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          />
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Password</label>
+          <input
+            type="password"
+            id="login-password"
+            required
+            placeholder="••••••••"
+            class="w-full px-3.5 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          />
+        </div>
+
+        <button
+          type="submit"
+          id="login-submit-btn"
+          class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl text-sm shadow-md shadow-indigo-600/30 transition-all flex items-center justify-center gap-2"
+        >
+          <span>Sign In</span>
+          <i data-lucide="arrow-right" class="w-4 h-4"></i>
+        </button>
+      </form>
+
+      <!-- Register Form -->
+      <form id="register-form" onsubmit="app.handleRegister(event)" class="space-y-4 hidden">
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Email Address</label>
+          <input
+            type="email"
+            id="register-email"
+            required
+            placeholder="name@example.com"
+            class="w-full px-3.5 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          />
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Password</label>
+          <input
+            type="password"
+            id="register-password"
+            required
+            oninput="app.validatePasswordInput()"
+            placeholder="At least 8 chars with uppercase, number & special char"
+            class="w-full px-3.5 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          />
+          
+          <!-- Password Requirement Checklist -->
+          <div class="mt-2 grid grid-cols-2 gap-1 text-[11px] text-slate-400" id="pwd-checklist">
+            <div id="pwd-rule-len" class="flex items-center gap-1"><span>•</span> 8+ chars</div>
+            <div id="pwd-rule-upper" class="flex items-center gap-1"><span>•</span> 1 Uppercase</div>
+            <div id="pwd-rule-lower" class="flex items-center gap-1"><span>•</span> 1 Lowercase</div>
+            <div id="pwd-rule-num" class="flex items-center gap-1"><span>•</span> 1 Number</div>
+            <div id="pwd-rule-spec" class="flex items-center gap-1 col-span-2"><span>•</span> Special char (. ! or _)</div>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Confirm Password</label>
+          <input
+            type="password"
+            id="register-confirm-password"
+            required
+            placeholder="Re-enter password"
+            class="w-full px-3.5 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          />
+        </div>
+
+        <button
+          type="submit"
+          id="register-submit-btn"
+          class="w-full py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-semibold rounded-xl text-sm shadow-md shadow-indigo-600/30 transition-all flex items-center justify-center gap-2"
+        >
+          <span>Create Account</span>
+          <i data-lucide="check" class="w-4 h-4"></i>
+        </button>
+      </form>
+
+    </div>
+  </div>
+
+  <!-- ================================================================= -->
+  <!-- MODAL 2: ANALYTICS INSPECTOR                                      -->
+  <!-- ================================================================= -->
+  <div id="analytics-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md hidden">
+    <div class="w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden p-6 sm:p-8 relative max-h-[90vh] overflow-y-auto">
+      
+      <!-- Close button -->
+      <button onclick="app.closeAnalyticsModal()" class="absolute top-4 right-4 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+
+      <!-- Analytics Header -->
+      <div class="mb-6">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="px-2 py-0.5 rounded text-xs font-mono font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+            URL #<span id="analytics-url-id">1</span>
+          </span>
+          <span class="text-xs text-slate-400">Live Traffic Analytics</span>
+        </div>
+        <h3 class="text-xl font-bold text-white flex items-center gap-2">
+          <i data-lucide="bar-chart-3" class="w-5 h-5 text-indigo-400"></i>
+          <span id="analytics-short-code">/slug</span>
+        </h3>
+      </div>
+
+      <!-- KPI Summary Cards -->
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">
+        <div class="p-4 rounded-xl bg-slate-800/60 border border-slate-700/60">
+          <div class="text-xs text-slate-400 mb-1">Total Clicks</div>
+          <div id="analytics-total-clicks" class="text-2xl font-extrabold text-white">0</div>
+        </div>
+
+        <div class="p-4 rounded-xl bg-slate-800/60 border border-slate-700/60">
+          <div class="text-xs text-slate-400 mb-1">Unique Visitors</div>
+          <div id="analytics-unique-visitors" class="text-2xl font-extrabold text-indigo-400">0</div>
+        </div>
+
+        <div class="p-4 rounded-xl bg-slate-800/60 border border-slate-700/60 col-span-2 sm:col-span-1">
+          <div class="text-xs text-slate-400 mb-1">Repeat Ratio</div>
+          <div id="analytics-repeat-rate" class="text-2xl font-extrabold text-purple-400">0%</div>
+        </div>
+      </div>
+
+      <!-- Charts Section -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        
+        <!-- Device Distribution -->
+        <div class="p-4 rounded-xl bg-slate-800/40 border border-slate-700/60">
+          <h4 class="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+            <i data-lucide="smartphone" class="w-4 h-4 text-indigo-400"></i> Device Distribution
+          </h4>
+          <div class="relative h-48 flex items-center justify-center">
+            <canvas id="deviceChart"></canvas>
+          </div>
+          <div id="device-legend" class="mt-4 space-y-1.5 text-xs"></div>
+        </div>
+
+        <!-- Geographic / Country Distribution -->
+        <div class="p-4 rounded-xl bg-slate-800/40 border border-slate-700/60">
+          <h4 class="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+            <i data-lucide="globe" class="w-4 h-4 text-purple-400"></i> Top Countries
+          </h4>
+          <div id="countries-list" class="space-y-2 max-h-56 overflow-y-auto pr-1"></div>
+        </div>
+
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="mt-6 pt-4 border-t border-slate-800 flex items-center justify-between">
+        <button
+          onclick="app.refreshCurrentAnalytics()"
+          class="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-300 flex items-center gap-1.5 transition-colors"
+        >
+          <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Refresh Analytics
+        </button>
+        <button
+          onclick="app.closeAnalyticsModal()"
+          class="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white transition-colors"
+        >
+          Done
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================================================================= -->
+  <!-- MODAL 3: QR CODE GENERATOR                                        -->
+  <!-- ================================================================= -->
+  <div id="qr-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md hidden">
+    <div class="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden p-6 text-center relative">
+      <button onclick="app.closeQrModal()" class="absolute top-4 right-4 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+
+      <h3 class="text-lg font-bold text-white mb-1">Scan QR Code</h3>
+      <p id="qr-short-url" class="text-xs text-indigo-400 font-mono mb-4 break-all">http://localhost:8080/slug</p>
+
+      <!-- QR Code Canvas Container -->
+      <div class="p-4 bg-white rounded-xl inline-block shadow-inner mb-4">
+        <div id="qrcode-render"></div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button
+          onclick="app.downloadQrCode()"
+          class="flex-1 py-2 px-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+        >
+          <i data-lucide="download" class="w-3.5 h-3.5"></i> Download PNG
+        </button>
+        <button
+          onclick="app.closeQrModal()"
+          class="py-2 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition-colors"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================= -->
+  <!-- MODAL 4: EDIT LINK DETAILS                                        -->
+  <!-- ================================================================= -->
+  <div id="edit-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md hidden">
+    <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden p-6 relative">
+      <button onclick="app.closeEditModal()" class="absolute top-4 right-4 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+
+      <h3 class="text-lg font-bold text-white mb-1">Edit Shortened URL</h3>
+      <p id="edit-modal-code" class="text-xs text-indigo-400 font-mono mb-4">/slug</p>
+
+      <form id="edit-form" onsubmit="app.handleUpdateUrl(event)" class="space-y-4">
+        <input type="hidden" id="edit-id" />
+
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Original Destination URL</label>
+          <input
+            type="url"
+            id="edit-original-url"
+            required
+            class="w-full px-3.5 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          />
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Expiration Date (Optional)</label>
+          <input
+            type="datetime-local"
+            id="edit-expires-at"
+            class="w-full px-3.5 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          />
+        </div>
+
+        <div class="flex items-center gap-2">
+          <input
+            type="checkbox"
+            id="edit-is-active"
+            class="rounded border-slate-700 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
+          />
+          <label for="edit-is-active" class="text-xs text-slate-300 cursor-pointer">Link is Active</label>
+        </div>
+
+        <div class="flex items-center gap-2 pt-2">
+          <button
+            type="submit"
+            class="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl transition-colors"
+          >
+            Save Changes
+          </button>
+          <button
+            type="button"
+            onclick="app.closeEditModal()"
+            class="py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-semibold rounded-xl transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="mt-auto border-t border-slate-800/80 bg-slate-950/40 text-slate-500 text-xs py-6 relative z-10">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
+      <div class="flex items-center gap-2">
+        <span class="font-bold text-slate-400">GoShort</span>
+        <span>— High Performance Go REST URL Shortener Backend & Dashboard</span>
+      </div>
+      <div class="flex items-center gap-4">
+        <span>Framework: <strong class="text-slate-400">Gin Gonic</strong></span>
+        <span>Database: <strong class="text-slate-400">PostgreSQL</strong></span>
+        <span>Cache: <strong class="text-slate-400">Redis</strong></span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/analytics.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

@@ -1,12 +1,16 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"url-shortener/config"
 	"url-shortener/models"
+	"url-shortener/repository"
 	"url-shortener/routes"
+	"url-shortener/service"
 	"url-shortener/validator"
+	"url-shortener/worker"
 )
 
 func main() {
@@ -22,21 +26,31 @@ func main() {
 		cfg.DBPassword,
 		cfg.DBName,
 	)
-
-	redisClient := config.NewRedis()
-
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	err = db.AutoMigrate(&models.URL{}, &models.User{})
+	redisClient := config.NewRedis()
 
+	// Auto-migrate models including URLClick
+	err = db.AutoMigrate(&models.URL{}, &models.User{}, &models.URLClick{})
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	log.Println("Database migrated successfully")
-	router := routes.SetupRouter(db, cfg, redisClient)
+
+	// Initialize repositories and services needed for analytics worker
+	urlRepo := repository.NewUrlRepository(db)
+	analyticsRepo := repository.NewAnalyticsRepository(db)
+	analyticsService := service.NewAnalyticsService(analyticsRepo, urlRepo)
+
+	// Initialize and start analytics worker pool
+	analyticsWorker := worker.NewAnalyticsWorker(analyticsService, 5, 1000)
+	analyticsWorker.Start(context.Background())
+	defer analyticsWorker.Stop()
+
+	router := routes.SetupRouter(db, cfg, redisClient, analyticsWorker)
 
 	serverAddr := ":" + cfg.ServerPort
 	fmt.Println("Listening on ", serverAddr)

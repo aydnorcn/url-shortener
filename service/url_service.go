@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
@@ -14,6 +15,14 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+type CachedURL struct {
+	ID          uint       `json:"id"`
+	OriginalURL string     `json:"original_url"`
+	IsActive    bool       `json:"is_active"`
+	IsDeleted   bool       `json:"is_deleted"`
+	ExpiresAt   *time.Time `json:"expires_at"`
+}
+
 type UrlService interface {
 	CreateUrl(userId uint, req dto.CreateUrlRequest) (*models.URL, error)
 	GetUrl(userId uint, urlId uint) (*models.URL, error)
@@ -22,7 +31,7 @@ type UrlService interface {
 	DeleteUrl(userId uint, urlId uint) error
 	ActivateUrl(userId uint, urlId uint) error
 	DeactivateUrl(userId uint, urlId uint) error
-	Redirect(shortCode string, ctx context.Context) (string, error)
+	Redirect(shortCode string, ctx context.Context) (*models.URL, error)
 }
 
 type urlService struct {
@@ -38,22 +47,23 @@ func NewUrlService(urlRepo repository.UrlRepository, redis *redis.Client) UrlSer
 }
 
 func (u *urlService) CreateUrl(userId uint, req dto.CreateUrlRequest) (*models.URL, error) {
-	if req.CustomAlias != nil {
-		var exists bool
-		exists, _ = u.urlRepo.ExistsByShortCode(*req.CustomAlias)
-
+	var shortCode string
+	if req.CustomAlias != nil && *req.CustomAlias != "" {
+		exists, _ := u.urlRepo.ExistsByShortCode(*req.CustomAlias)
 		if exists {
 			return nil, &appErrors.AppError{
-				Code:    "URl_ALREADY_EXISTS",
-				Message: "Url already exists",
+				Code:    "URL_ALREADY_EXISTS",
+				Message: "Url alias already exists",
 				Status:  http.StatusConflict,
 			}
 		}
-	}
-
-	shortCode, err := utils.GenerateShortCode()
-	if err != nil {
-		return nil, err
+		shortCode = *req.CustomAlias
+	} else {
+		generated, err := utils.GenerateShortCode()
+		if err != nil {
+			return nil, err
+		}
+		shortCode = generated
 	}
 
 	url := &models.URL{
@@ -70,20 +80,18 @@ func (u *urlService) CreateUrl(userId uint, req dto.CreateUrlRequest) (*models.U
 	}
 
 	return url, nil
-
 }
 
 func (u *urlService) GetUrl(userId uint, urlId uint) (*models.URL, error) {
 	url, err := u.urlRepo.FindByIdAndUserId(urlId, userId)
 	if err != nil {
-		return nil, err
+		return nil, appErrors.ErrURLNotFound
 	}
 	return url, nil
 }
 
 func (u *urlService) GetUserUrls(userId uint, page, pageSize int) (*[]models.URL, int64, error) {
 	urls, total, err := u.urlRepo.FindAllByUserId(userId, page, pageSize)
-
 	if err != nil {
 		return nil, -1, &appErrors.AppError{
 			Code:    "DB_ERROR",
@@ -91,18 +99,18 @@ func (u *urlService) GetUserUrls(userId uint, page, pageSize int) (*[]models.URL
 			Status:  http.StatusInternalServerError,
 		}
 	}
-
 	return urls, total, nil
 }
 
 func (u *urlService) UpdateUrl(userId uint, urlId uint, req dto.UpdateUrlRequest) (*models.URL, error) {
 	url, err := u.urlRepo.FindByIdAndUserId(urlId, userId)
-
 	if err != nil {
 		return nil, appErrors.ErrURLNotFound
 	}
 
-	url.OriginalURL = req.OriginalUrl
+	if req.OriginalUrl != "" {
+		url.OriginalURL = req.OriginalUrl
+	}
 
 	if req.ExpiresAt != nil {
 		url.ExpiresAt = req.ExpiresAt
@@ -112,14 +120,17 @@ func (u *urlService) UpdateUrl(userId uint, urlId uint, req dto.UpdateUrlRequest
 		url.IsActive = *req.IsActive
 	}
 
-	ok := u.urlRepo.Update(url)
-
-	if ok != nil {
+	if err := u.urlRepo.Update(url); err != nil {
 		return nil, &appErrors.AppError{
 			Code:    "DB_ERROR",
 			Message: "Database error",
 			Status:  http.StatusInternalServerError,
 		}
+	}
+
+	// Invalidate cache
+	if u.redis != nil {
+		_ = u.redis.Del(context.Background(), "url:"+url.ShortCode).Err()
 	}
 
 	return url, nil
@@ -134,20 +145,27 @@ func (u *urlService) DeleteUrl(userId uint, urlId uint) error {
 	if err := u.urlRepo.SoftDelete(url); err != nil {
 		return appErrors.ErrServerError
 	}
+
+	if u.redis != nil {
+		_ = u.redis.Del(context.Background(), "url:"+url.ShortCode).Err()
+	}
+
 	return nil
 }
 
 func (u *urlService) ActivateUrl(userId uint, urlId uint) error {
 	url, err := u.urlRepo.FindByIdAndUserId(urlId, userId)
-
 	if err != nil {
 		return appErrors.ErrURLNotFound
 	}
 
 	url.IsActive = true
-
-	if err := u.urlRepo.Update(url); err != nil {
+	if err := u.urlRepo.UpdateIsActive(urlId, true); err != nil {
 		return appErrors.ErrServerError
+	}
+
+	if u.redis != nil {
+		_ = u.redis.Del(context.Background(), "url:"+url.ShortCode).Err()
 	}
 
 	return nil
@@ -155,44 +173,70 @@ func (u *urlService) ActivateUrl(userId uint, urlId uint) error {
 
 func (u *urlService) DeactivateUrl(userId uint, urlId uint) error {
 	url, err := u.urlRepo.FindByIdAndUserId(urlId, userId)
-
 	if err != nil {
 		return appErrors.ErrURLNotFound
 	}
 
 	url.IsActive = false
-
-	if err := u.urlRepo.Update(url); err != nil {
+	if err := u.urlRepo.UpdateIsActive(urlId, false); err != nil {
 		return appErrors.ErrServerError
+	}
+
+	if u.redis != nil {
+		_ = u.redis.Del(context.Background(), "url:"+url.ShortCode).Err()
 	}
 
 	return nil
 }
 
-func (u *urlService) Redirect(shortCode string, ctx context.Context) (string, error) {
-
+func (u *urlService) Redirect(shortCode string, ctx context.Context) (*models.URL, error) {
 	key := "url:" + shortCode
 
-	originalUrl, err := u.redis.Get(ctx, key).Result()
+	if u.redis != nil {
+		cachedData, err := u.redis.Get(ctx, key).Result()
+		if err == nil {
+			var cached CachedURL
+			if jsonErr := json.Unmarshal([]byte(cachedData), &cached); jsonErr == nil {
+				if cached.IsDeleted || !cached.IsActive {
+					return nil, &appErrors.AppError{
+						Code:    "URL_ALREADY_DELETED",
+						Message: "Url already deleted",
+						Status:  http.StatusNoContent,
+					}
+				}
 
-	if err == nil {
-		// Cache HIT
-		return originalUrl, nil
+				if cached.ExpiresAt != nil && !cached.ExpiresAt.After(time.Now()) {
+					_ = u.urlRepo.UpdateIsActive(cached.ID, false)
+					_ = u.redis.Del(ctx, key).Err()
+					return nil, &appErrors.AppError{
+						Code:    "URL_EXPIRES_ALREADY",
+						Message: "Url already expired",
+						Status:  http.StatusNoContent,
+					}
+				}
+
+				return &models.URL{
+					ID:          cached.ID,
+					OriginalURL: cached.OriginalURL,
+					ShortCode:   shortCode,
+					ExpiresAt:   cached.ExpiresAt,
+					IsActive:    cached.IsActive,
+					IsDeleted:   cached.IsDeleted,
+				}, nil
+			}
+		} else if !errors.Is(err, redis.Nil) {
+			// Redis error, proceed to database lookup
+		}
 	}
 
-	if !errors.Is(err, redis.Nil) {
-		return "", err
-	}
-
-	// Cache MISS
+	// Cache MISS: Query Database
 	url, err := u.urlRepo.FindByShortCode(shortCode)
-
 	if err != nil {
-		return "", appErrors.ErrURLNotFound
+		return nil, appErrors.ErrURLNotFound
 	}
 
 	if url.IsDeleted || !url.IsActive {
-		return "", &appErrors.AppError{
+		return nil, &appErrors.AppError{
 			Code:    "URL_ALREADY_DELETED",
 			Message: "Url already deleted",
 			Status:  http.StatusNoContent,
@@ -202,25 +246,27 @@ func (u *urlService) Redirect(shortCode string, ctx context.Context) (string, er
 	if url.ExpiresAt != nil && !url.ExpiresAt.After(time.Now()) {
 		url.IsActive = false
 		if err := u.urlRepo.UpdateIsActive(url.ID, false); err != nil {
-			return "", appErrors.ErrServerError
+			return nil, appErrors.ErrServerError
 		}
-		return "", &appErrors.AppError{
+		return nil, &appErrors.AppError{
 			Code:    "URL_EXPIRES_ALREADY",
 			Message: "Url already expired",
 			Status:  http.StatusNoContent,
 		}
 	}
 
-	err = u.redis.Set(
-		ctx,
-		key,
-		url.OriginalURL,
-		10*time.Minute,
-	).Err()
-
-	if err != nil {
-		return "", err
+	if u.redis != nil {
+		cached := CachedURL{
+			ID:          url.ID,
+			OriginalURL: url.OriginalURL,
+			IsActive:    url.IsActive,
+			IsDeleted:   url.IsDeleted,
+			ExpiresAt:   url.ExpiresAt,
+		}
+		if cachedJSON, jsonErr := json.Marshal(cached); jsonErr == nil {
+			_ = u.redis.Set(ctx, key, string(cachedJSON), 10*time.Minute).Err()
+		}
 	}
 
-	return url.OriginalURL, nil
+	return url, nil
 }
