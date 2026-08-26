@@ -2,6 +2,7 @@ package routes
 
 import (
 	"time"
+	"url-shortener/cache"
 	"url-shortener/config"
 	"url-shortener/controller"
 	"url-shortener/middleware"
@@ -11,16 +12,15 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
-func SetupRouter(db *gorm.DB, cfg config.Config, redis *redis.Client, analyticsWorker worker.AnalyticsWorker) *gin.Engine {
+func SetupRouter(db *gorm.DB, cfg config.Config, cache cache.Cache, analyticsWorker worker.AnalyticsWorker) *gin.Engine {
 	r := gin.Default()
 	r.Use(middleware.CORSMiddleware())
+	r.Use(middleware.MetricsMiddleware())
 	r.Use(middleware.ErrorHandlerMiddleware())
 	r.Use(middleware.NewRateLimiter(60, time.Minute).LimitMiddleware())
-	r.Use(middleware.MetricsMiddleware())
 
 	// Serve frontend website
 	r.Static("/static", "./static")
@@ -32,7 +32,7 @@ func SetupRouter(db *gorm.DB, cfg config.Config, redis *redis.Client, analyticsW
 	analyticsRepo := repository.NewAnalyticsRepository(db)
 
 	authService := service.NewAuthService(userRepo, &cfg)
-	urlService := service.NewUrlService(urlRepo, redis)
+	urlService := service.NewUrlService(urlRepo, cache)
 	analyticsService := service.NewAnalyticsService(analyticsRepo, urlRepo)
 
 	authController := controller.NewAuthController(authService)

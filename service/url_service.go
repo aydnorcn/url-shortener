@@ -3,17 +3,16 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"errors"
+	"log"
 	"net/http"
 	"time"
 	"url-shortener/appErrors"
+	"url-shortener/cache"
 	"url-shortener/dto"
 	"url-shortener/metrics"
 	"url-shortener/models"
 	"url-shortener/repository"
 	"url-shortener/utils"
-
-	"github.com/redis/go-redis/v9"
 )
 
 type CachedURL struct {
@@ -37,13 +36,13 @@ type UrlService interface {
 
 type urlService struct {
 	urlRepo repository.UrlRepository
-	redis   *redis.Client
+	cache   cache.Cache
 }
 
-func NewUrlService(urlRepo repository.UrlRepository, redis *redis.Client) UrlService {
+func NewUrlService(urlRepo repository.UrlRepository, cache cache.Cache) UrlService {
 	return &urlService{
 		urlRepo: urlRepo,
-		redis:   redis,
+		cache:   cache,
 	}
 }
 
@@ -129,9 +128,14 @@ func (u *urlService) UpdateUrl(userId uint, urlId uint, req dto.UpdateUrlRequest
 		}
 	}
 
-	// Invalidate cache
-	if u.redis != nil {
-		_ = u.redis.Del(context.Background(), "url:"+url.ShortCode).Err()
+	if err := u.cache.Delete(context.Background(), "url:"+url.ShortCode); err != nil {
+		metrics.CacheInvalidationErrorsTotal.Inc()
+
+		log.Printf(
+			"failed to invalidate cache for URL %d: %v",
+			urlId,
+			err,
+		)
 	}
 
 	return url, nil
@@ -147,8 +151,14 @@ func (u *urlService) DeleteUrl(userId uint, urlId uint) error {
 		return appErrors.ErrServerError
 	}
 
-	if u.redis != nil {
-		_ = u.redis.Del(context.Background(), "url:"+url.ShortCode).Err()
+	if err := u.cache.Delete(context.Background(), "url:"+url.ShortCode); err != nil {
+		metrics.CacheInvalidationErrorsTotal.Inc()
+
+		log.Printf(
+			"failed to invalidate cache for URL %d: %v",
+			urlId,
+			err,
+		)
 	}
 
 	return nil
@@ -160,13 +170,18 @@ func (u *urlService) ActivateUrl(userId uint, urlId uint) error {
 		return appErrors.ErrURLNotFound
 	}
 
-	url.IsActive = true
 	if err := u.urlRepo.UpdateIsActive(urlId, true); err != nil {
 		return appErrors.ErrServerError
 	}
 
-	if u.redis != nil {
-		_ = u.redis.Del(context.Background(), "url:"+url.ShortCode).Err()
+	if err := u.cache.Delete(context.Background(), "url:"+url.ShortCode); err != nil {
+		metrics.CacheInvalidationErrorsTotal.Inc()
+
+		log.Printf(
+			"failed to invalidate cache for URL %d: %v",
+			urlId,
+			err,
+		)
 	}
 
 	return nil
@@ -178,13 +193,18 @@ func (u *urlService) DeactivateUrl(userId uint, urlId uint) error {
 		return appErrors.ErrURLNotFound
 	}
 
-	url.IsActive = false
 	if err := u.urlRepo.UpdateIsActive(urlId, false); err != nil {
 		return appErrors.ErrServerError
 	}
 
-	if u.redis != nil {
-		_ = u.redis.Del(context.Background(), "url:"+url.ShortCode).Err()
+	if err := u.cache.Delete(context.Background(), "url:"+url.ShortCode); err != nil {
+		metrics.CacheInvalidationErrorsTotal.Inc()
+
+		log.Printf(
+			"failed to invalidate cache for URL %d: %v",
+			urlId,
+			err,
+		)
 	}
 
 	return nil
@@ -193,22 +213,18 @@ func (u *urlService) DeactivateUrl(userId uint, urlId uint) error {
 func (u *urlService) Redirect(shortCode string, ctx context.Context) (*models.URL, error) {
 	key := "url:" + shortCode
 
-	if u.redis != nil {
-		cachedData, err := u.redis.Get(ctx, key).Result()
+	if u.cache != nil {
+		cachedData, err := u.cache.Get(ctx, key)
+
 		if err == nil {
 			var cached CachedURL
-			if jsonErr := json.Unmarshal([]byte(cachedData), &cached); jsonErr == nil {
-				if cached.IsDeleted || !cached.IsActive {
-					return nil, &appErrors.AppError{
-						Code:    "URL_ALREADY_DELETED",
-						Message: "Url already deleted",
-						Status:  http.StatusNoContent,
-					}
-				}
+
+			if jsonError := json.Unmarshal([]byte(cachedData), &cached); jsonError == nil {
 
 				if cached.ExpiresAt != nil && !cached.ExpiresAt.After(time.Now()) {
 					_ = u.urlRepo.UpdateIsActive(cached.ID, false)
-					_ = u.redis.Del(ctx, key).Err()
+					_ = u.cache.Delete(ctx, key)
+
 					return nil, &appErrors.AppError{
 						Code:    "URL_EXPIRES_ALREADY",
 						Message: "Url already expired",
@@ -216,7 +232,6 @@ func (u *urlService) Redirect(shortCode string, ctx context.Context) (*models.UR
 					}
 				}
 
-				metrics.CacheHitsTotal.Inc()
 				return &models.URL{
 					ID:          cached.ID,
 					OriginalURL: cached.OriginalURL,
@@ -226,8 +241,6 @@ func (u *urlService) Redirect(shortCode string, ctx context.Context) (*models.UR
 					IsDeleted:   cached.IsDeleted,
 				}, nil
 			}
-		} else if !errors.Is(err, redis.Nil) {
-			// Redis error, proceed to database lookup
 		}
 	}
 
@@ -257,20 +270,29 @@ func (u *urlService) Redirect(shortCode string, ctx context.Context) (*models.UR
 		}
 	}
 
-	if u.redis != nil {
-		cached := CachedURL{
-			ID:          url.ID,
-			OriginalURL: url.OriginalURL,
-			IsActive:    url.IsActive,
-			IsDeleted:   url.IsDeleted,
-			ExpiresAt:   url.ExpiresAt,
-		}
-		if cachedJSON, jsonErr := json.Marshal(cached); jsonErr == nil {
-			_ = u.redis.Set(ctx, key, string(cachedJSON), 10*time.Minute).Err()
-		}
+	cached := CachedURL{
+		ID:          url.ID,
+		OriginalURL: url.OriginalURL,
+		ExpiresAt:   url.ExpiresAt,
+		IsActive:    url.IsActive,
+		IsDeleted:   url.IsDeleted,
 	}
 
-	metrics.CacheMissesTotal.Inc()
+	cachedData, err := json.Marshal(cached)
+	if err == nil {
+		if err := u.cache.Set(
+			ctx,
+			key,
+			string(cachedData),
+			10*time.Minute,
+		); err != nil {
+			log.Printf(
+				"failed to cache URL %s: %v",
+				shortCode,
+				err,
+			)
+		}
+	}
 
 	return url, nil
 }

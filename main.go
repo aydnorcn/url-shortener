@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"url-shortener/cache"
 	"url-shortener/config"
 	"url-shortener/metrics"
 	"url-shortener/models"
@@ -32,6 +33,7 @@ func main() {
 	}
 
 	redisClient := config.NewRedis()
+	redisCache := cache.NewRedisCache(redisClient)
 	metrics.Init()
 
 	// Auto-migrate models including URLClick
@@ -52,7 +54,7 @@ func main() {
 	analyticsWorker.Start(context.Background())
 	defer analyticsWorker.Stop()
 
-	router := routes.SetupRouter(db, cfg, redisClient, analyticsWorker)
+	router := routes.SetupRouter(db, cfg, redisCache, analyticsWorker)
 
 	serverAddr := ":" + cfg.ServerPort
 	fmt.Println("Listening on ", serverAddr)
