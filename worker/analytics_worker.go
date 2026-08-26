@@ -4,7 +4,9 @@ import (
 	"context"
 	"log"
 	"sync"
+	"time"
 	"url-shortener/dto"
+	"url-shortener/metrics"
 	"url-shortener/service"
 )
 
@@ -52,30 +54,41 @@ func (w *analyticsWorker) Start(ctx context.Context) {
 
 func (w *analyticsWorker) Worker(id int) {
 	defer w.wg.Done()
+
 	for {
 		select {
+
 		case <-w.ctx.Done():
 			// Process remaining events in the channel upon shutdown
 			for {
 				select {
+
 				case event, ok := <-w.eventChan:
 					if !ok {
 						return
 					}
-					if err := w.analyticsService.RecordClick(context.Background(), event); err != nil {
-						log.Printf("[Worker %d] Error saving click event on shutdown for URL ID %d: %v", id, event.URLID, err)
-					}
+
+					metrics.AnalyticsQueueSize.Set(
+						float64(len(w.eventChan)),
+					)
+
+					w.processEvent(event, id)
+
 				default:
 					return
 				}
 			}
+
 		case event, ok := <-w.eventChan:
 			if !ok {
 				return
 			}
-			if err := w.analyticsService.RecordClick(context.Background(), event); err != nil {
-				log.Printf("[Worker %d] Error recording click event for URL ID %d: %v", id, event.URLID, err)
-			}
+
+			metrics.AnalyticsQueueSize.Set(
+				float64(len(w.eventChan)),
+			)
+
+			w.processEvent(event, id)
 		}
 	}
 }
@@ -110,4 +123,32 @@ func (w *analyticsWorker) Stop() {
 	close(w.eventChan)
 	w.wg.Wait()
 	log.Println("Analytics worker pool stopped")
+}
+
+func (w *analyticsWorker) processEvent(event dto.ClickEvent, workerID int) {
+	start := time.Now()
+
+	err := w.analyticsService.RecordClick(
+		context.Background(),
+		event,
+	)
+
+	metrics.AnalyticsProcessingDuration.Observe(
+		time.Since(start).Seconds(),
+	)
+
+	if err != nil {
+		metrics.AnalyticsEventsFailedTotal.Inc()
+
+		log.Printf(
+			"[Worker %d] Error recording click event for URL ID %d: %v",
+			workerID,
+			event.URLID,
+			err,
+		)
+
+		return
+	}
+
+	metrics.AnalyticsEventsProcessedTotal.Inc()
 }
