@@ -28,6 +28,14 @@ func MetricsMiddleware() gin.HandlerFunc {
 
 		status := c.Writer.Status()
 
+		if status >= 400 && status < 500 {
+			metrics.HTTPErrorTotal.WithLabelValues(
+				c.Request.Method,
+				c.FullPath(),
+				strconv.Itoa(status),
+			).Inc()
+		}
+
 		metrics.HTTPRequestsTotal.WithLabelValues(
 			c.Request.Method,
 			c.FullPath(),
