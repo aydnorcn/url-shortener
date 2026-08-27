@@ -32,7 +32,6 @@ The service includes JWT-based user authentication, custom link aliases, expirat
   - [Redirection & System](#redirection--system)
 - [Observability & Monitoring](#-observability--monitoring)
 - [Web Dashboard](#-web-dashboard)
-- [License](#-license)
 
 ---
 
